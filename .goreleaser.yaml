@@ -1,0 +1,70 @@
+version: 2
+
+project_name: nexrender
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: nexrender
+    main: ./cmd/nexrender
+    binary: nexrender
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/nexrender/nexrender-cli/internal/buildinfo.Version={{.Version}}
+        -X github.com/nexrender/nexrender-cli/internal/buildinfo.Commit={{.Commit}}
+        -X github.com/nexrender/nexrender-cli/internal/buildinfo.Date={{.Date}}
+
+archives:
+  - ids:
+      - nexrender
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - skills/nexrender/**/*
+
+checksum:
+  name_template: checksums.txt
+
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - --yes
+    artifacts: checksum
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  github:
+    owner: nexrender
+    name: nexrender-cli
