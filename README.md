@@ -36,6 +36,22 @@ Or install it with Go:
 go install github.com/nexrender/nexrender-cli/cmd/nexrender@latest
 ```
 
+## Update
+
+Run the installer for your platform again. It replaces the current binary with the latest release, keeps your profiles and credentials, and refreshes CLI-managed agent skills.
+
+For a binary-only update on macOS, Linux, or WSL:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nexrender/nexrender-cli/main/scripts/install.sh | NEXRENDER_SKIP_SETUP=1 sh
+```
+
+If you installed with Go:
+
+```bash
+go install github.com/nexrender/nexrender-cli/cmd/nexrender@latest
+```
+
 ## Getting started
 
 Run:
