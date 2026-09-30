@@ -41,6 +41,17 @@ download() {
   curl --fail --silent --show-error --location "$1" --output "$2"
 }
 
+calculate_checksum() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1"
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1"
+  else
+    echo "Neither sha256sum nor shasum is available" >&2
+    return 1
+  fi
+}
+
 echo "Downloading ${archive} from https://github.com/${repository}"
 download "${release_url}/${archive}" "${temporary_dir}/${archive}"
 download "${release_url}/checksums.txt" "${temporary_dir}/checksums.txt"
@@ -51,14 +62,16 @@ if [ -z "$checksum_line" ]; then
   exit 1
 fi
 
-if command -v sha256sum >/dev/null 2>&1; then
-  (cd "$temporary_dir" && printf '%s\n' "$checksum_line" | sha256sum --check --status)
-elif command -v shasum >/dev/null 2>&1; then
-  expected="$(printf '%s\n' "$checksum_line" | awk '{print $1}')"
-  actual="$(shasum -a 256 "${temporary_dir}/${archive}" | awk '{print $1}')"
-  [ "$expected" = "$actual" ] || { echo "Checksum verification failed" >&2; exit 1; }
-else
-  echo "Neither sha256sum nor shasum is available" >&2
+# Compare digests directly: macOS sha256sum requires a filename in --check mode.
+# Capture the command separately so a hashing failure cannot be hidden by awk.
+if ! checksum_output="$(calculate_checksum "${temporary_dir}/${archive}")"; then
+  echo "Failed to calculate SHA-256 checksum for ${archive}" >&2
+  exit 1
+fi
+expected="$(printf '%s\n' "$checksum_line" | awk '{print $1}')"
+actual="$(printf '%s\n' "$checksum_output" | awk '{print $1}')"
+if [ "$expected" != "$actual" ]; then
+  echo "Checksum verification failed for ${archive}" >&2
   exit 1
 fi
 
