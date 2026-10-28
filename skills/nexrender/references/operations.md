@@ -5,6 +5,7 @@
 - Layer names are case-sensitive. Use the `name` returned by `template layers` as `layerName`.
 - Codec identifiers use their full prefix, such as `video_h264_vbr_15mbps`, `image_png`, or `video_prores_422`.
 - `preview: true` and `settings` are mutually exclusive. Preview mode ignores normal output settings.
+- `settings.multiFrame` turns After Effects Multi-Frame Rendering on (`true`) or off (`false`) for one job. Leave it out to keep the render node's default. Set `false` when a template renders incorrectly with Multi-Frame Rendering.
 - `${secrets.NAME}` is the secret reference form.
 - `missingFonts` is a visual-correctness warning. A render may finish with fallback fonts and still be wrong.
 
