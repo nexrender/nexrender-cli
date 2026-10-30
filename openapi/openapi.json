@@ -924,7 +924,7 @@
           "batchId": {
             "type": "string",
             "pattern": "^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
-            "description": "Optional client-chosen ULID that makes the request safe to retry. Sending a batch again with the same batchId creates only the jobs that are not in it yet: the response is 200 with status 'replayed' when nothing was missing, or 'partial' when the missing jobs were created. Retries are recognised for 30 days, while the batch's jobs are kept. Send a retry only after the previous request has returned or timed out: two requests with the same batchId in flight at once can both create jobs. Without it the API generates one, and a retry creates a new batch."
+            "description": "Optional client-chosen ULID that makes the request safe to retry. Sending a batch again with the same batchId creates only the jobs that are not in it yet: the response is 200 with status 'replayed' when nothing was missing, or 'partial' when the missing jobs were created. Retries are recognised for 30 days, while the batch's jobs are kept. Requests with the same batchId must not run at the same time: two that overlap on the server can both create jobs. A timeout on your side does not mean the server stopped processing, so after a timeout wait until GET /batches/{id} stops changing before retrying. Without it the API generates one, and a retry creates a new batch."
           },
           "jobs": {
             "type": "array",
