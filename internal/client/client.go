@@ -23,7 +23,7 @@ func New(server, token string, timeout time.Duration) (*API, error) {
 	server = strings.TrimRight(server, "/")
 	parsed, err := url.Parse(server)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return nil, clierr.Validation("invalid API server URL", "Use a full URL such as https://api.nexrender.com/api/v2.")
+		return nil, clierr.Validation("invalid API server URL", "Use the API address, such as https://api.nexrender.com.")
 	}
 	httpClient := &http.Client{Timeout: timeout}
 	editor := func(_ context.Context, req *http.Request) error {

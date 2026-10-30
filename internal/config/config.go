@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,6 +109,19 @@ func ValidateProfileName(name string) error {
 	return nil
 }
 
+// NormalizeServer trims a server URL and, when it is only the API's address
+// (https://api.nexrender.com) or ends in /api, adds the /api/v2 base the client needs.
+// Other paths are kept as given, for gateways and proxies that mount the API elsewhere.
 func NormalizeServer(server string) string {
-	return strings.TrimRight(strings.TrimSpace(server), "/")
+	server = strings.TrimRight(strings.TrimSpace(server), "/")
+	parsed, err := url.Parse(server)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return server
+	}
+	switch parsed.Path {
+	case "", "/api":
+		parsed.Path = "/api/v2"
+		return parsed.String()
+	}
+	return server
 }
