@@ -425,16 +425,20 @@
       },
       "JobTemplate": {
         "type": "object",
-        "description": "Template configuration defining the After Effects project and composition to render",
+        "description": "Template configuration defining the After Effects project and composition to render. Provide exactly one of `id` (an uploaded template) or `src` (a template URL); sending both, or neither, is rejected.",
         "properties": {
           "id": {
             "type": "string",
             "pattern": "^[A-Z0-9]{26}$",
-            "description": "Unique template identifier in ULID format (26 characters, uppercase alphanumeric)"
+            "description": "Unique template identifier in ULID format (26 characters, uppercase alphanumeric). Use instead of `src`."
           },
           "src": {
             "type": "string",
-            "description": "Source URL to the After Effects template (.aep, .mogrt, or .zip file)"
+            "description": "Use instead of `id`. Public HTTP(S), native s3:/gs:, inline data:, or a file: URL inside the current job work directory for an After Effects template (.aep, .mogrt, or .zip file). The worker rejects paths and symlinks escaping that directory and non-public network destinations. Requires `name`."
+          },
+          "name": {
+            "type": "string",
+            "description": "Project file name. Required with `src`: for a .zip, the path of the .aep inside the archive (for example `project/main.aep`); otherwise the file name of the .aep or .mogrt. With `id`, it defaults to the name detected when the template was uploaded."
           },
           "composition": {
             "type": "string",
@@ -442,9 +446,6 @@
             "nullable": true
           }
         },
-        "required": [
-          "id"
-        ],
         "additionalProperties": true
       },
       "JobCreation": {

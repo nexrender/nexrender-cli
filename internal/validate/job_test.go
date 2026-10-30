@@ -23,3 +23,26 @@ func TestJobPayloadAcceptsShortAndFullCodecNames(t *testing.T) {
 		}
 	}
 }
+
+func TestJobPayloadTemplateSource(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload string
+		valid   bool
+	}{
+		{"uploaded template", `{"template":{"id":"tpl","composition":"Main"}}`, true},
+		{"template URL", `{"template":{"src":"https://nx1-assets-eu.nexrender.com/example/Test%20AEP.zip","name":"LTExample.aep","composition":"Final 2"}}`, true},
+		{"neither", `{"template":{"composition":"Main"}}`, false},
+		{"both", `{"template":{"id":"tpl","src":"https://nx1-assets-eu.nexrender.com/example/Test%20AEP.zip","name":"LTExample.aep","composition":"Main"}}`, false},
+		{"src without name", `{"template":{"src":"https://nx1-assets-eu.nexrender.com/example/Test%20AEP.zip","composition":"Final 2"}}`, false},
+	}
+	for _, tc := range cases {
+		_, err := JobPayload([]byte(tc.payload))
+		if tc.valid && err != nil {
+			t.Errorf("%s: unexpected error %v", tc.name, err)
+		}
+		if !tc.valid && err == nil {
+			t.Errorf("%s: expected a validation error", tc.name)
+		}
+	}
+}
