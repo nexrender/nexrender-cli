@@ -58,10 +58,25 @@ func newBatchSubmitCommand(state *State) *cobra.Command {
 			if err != nil {
 				return client.NetworkError(err)
 			}
-			if response.StatusCode() != http.StatusCreated || response.JSON201 == nil {
-				return client.HTTPError(response.StatusCode(), response.Body, responseHeaders(response.HTTPResponse))
+			switch {
+			case response.StatusCode() == http.StatusCreated && response.JSON201 != nil:
+				return state.Printer(state.Out).Success(*response.JSON201, "Submitted batch "+response.JSON201.BatchId, nil)
+			case response.StatusCode() == http.StatusOK && response.JSON200 != nil:
+				// A retry with a batchId the API already knows: it created only what was missing.
+				result := *response.JSON200
+				summary := fmt.Sprintf("Batch %s already existed; created the missing jobs (%d of %d now exist)", result.BatchId, result.SuccessCount, result.TotalJobs)
+				if result.Status == api.BatchCreationResponseStatusReplayed {
+					summary = "Batch " + result.BatchId + " already existed; no new jobs were created"
+				}
+				return state.Printer(state.Out).Success(result, summary, nil)
 			}
-			return state.Printer(state.Out).Success(*response.JSON201, "Submitted batch "+response.JSON201.BatchId, nil)
+			failure := client.HTTPError(response.StatusCode(), response.Body, responseHeaders(response.HTTPResponse))
+			if response.StatusCode() == http.StatusServiceUnavailable && payload.BatchId != nil {
+				if structured, ok := failure.(*clierr.Error); ok {
+					structured.Hint = "Some jobs may already exist. Run the same command again with the same batchId; only the missing jobs are created."
+				}
+			}
+			return failure
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "-", "batch JSON file, or - for stdin")

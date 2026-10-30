@@ -38,9 +38,10 @@ const (
 
 // Defines values for BatchCreationResponseStatus.
 const (
-	BatchCreationResponseStatusCreated BatchCreationResponseStatus = "created"
-	BatchCreationResponseStatusError   BatchCreationResponseStatus = "error"
-	BatchCreationResponseStatusPartial BatchCreationResponseStatus = "partial"
+	BatchCreationResponseStatusCreated  BatchCreationResponseStatus = "created"
+	BatchCreationResponseStatusError    BatchCreationResponseStatus = "error"
+	BatchCreationResponseStatusPartial  BatchCreationResponseStatus = "partial"
+	BatchCreationResponseStatusReplayed BatchCreationResponseStatus = "replayed"
 )
 
 // Defines values for BatchStatusResponseStatus.
@@ -234,7 +235,10 @@ type BatchCancellationResponseStatus string
 
 // BatchCreation Configuration for creating a batch of render jobs in a single request (1 to 1000 jobs)
 type BatchCreation struct {
-	// Jobs Array of job configurations to create as a batch. Each item follows the same schema as a single job creation request.
+	// BatchId Optional client-chosen ULID that makes the request safe to retry. Sending a batch again with the same batchId creates only the jobs that are not in it yet: the response is 200 with status 'replayed' when nothing was missing, or 'partial' when the missing jobs were created. Without it the API generates one, and a retry creates a new batch.
+	BatchId *string `json:"batchId,omitempty"`
+
+	// Jobs Array of job configurations to create as a batch. Each item follows the same schema as a single job creation request, plus an optional `batchItemId` string (at most 255 characters) that identifies the job within the batch when it is retried. Items without one are matched by their position.
 	Jobs []JobCreation `json:"jobs"`
 }
 
@@ -242,6 +246,12 @@ type BatchCreation struct {
 type BatchCreationResponse struct {
 	// BatchId Unique batch identifier in ULID format for tracking the entire batch
 	BatchId string `json:"batchId"`
+
+	// Error Present on 409 and 503 responses: why the batch could not be completed
+	Error *string `json:"error,omitempty"`
+
+	// ErrorCode Present on 409 and 503 responses, for example BATCH_ALREADY_PARTIAL or BATCH_RETRYABLE
+	ErrorCode *string `json:"errorCode,omitempty"`
 
 	// Errors Array of errors for failed jobs (only present when status is 'partial' or 'error')
 	Errors *[]struct {
@@ -281,7 +291,7 @@ type BatchCreationResponse struct {
 		Status *string `json:"status,omitempty"`
 	} `json:"jobs"`
 
-	// Status 'created' if all jobs succeeded, 'partial' if some failed, 'error' if all failed
+	// Status 'created' if all jobs succeeded, 'partial' if some failed or a retry created only the missing jobs, 'error' if all failed, 'replayed' if a retry with the same batchId found every job already created
 	Status BatchCreationResponseStatus `json:"status"`
 
 	// SuccessCount Number of successfully created jobs
@@ -291,7 +301,7 @@ type BatchCreationResponse struct {
 	TotalJobs int `json:"totalJobs"`
 }
 
-// BatchCreationResponseStatus 'created' if all jobs succeeded, 'partial' if some failed, 'error' if all failed
+// BatchCreationResponseStatus 'created' if all jobs succeeded, 'partial' if some failed or a retry created only the missing jobs, 'error' if all failed, 'replayed' if a retry with the same batchId found every job already created
 type BatchCreationResponseStatus string
 
 // BatchStatusResponse Current status and progress of a batch of jobs
@@ -3922,10 +3932,13 @@ type ClientWithResponsesInterface interface {
 type CreateBatchResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *BatchCreationResponse
 	JSON201      *BatchCreationResponse
 	JSON400      *BatchCreationResponse
 	JSON401      *ErrorResponse
 	JSON403      *ErrorResponse
+	JSON409      *BatchCreationResponse
+	JSON503      *BatchCreationResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -4930,6 +4943,13 @@ func ParseCreateBatchResponse(rsp *http.Response) (*CreateBatchResponse, error) 
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BatchCreationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 		var dest BatchCreationResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4957,6 +4977,20 @@ func ParseCreateBatchResponse(rsp *http.Response) (*CreateBatchResponse, error) 
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest BatchCreationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest BatchCreationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
