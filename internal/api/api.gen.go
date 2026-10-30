@@ -560,7 +560,7 @@ type JobCreation struct {
 		Type *JobCreationSettingsType `json:"type,omitempty"`
 	} `json:"settings,omitempty"`
 
-	// Template Template configuration defining the After Effects project and composition to render
+	// Template Template configuration defining the After Effects project and composition to render. Provide exactly one of `id` (an uploaded template) or `src` (a template URL); sending both, or neither, is rejected.
 	Template JobTemplate `json:"template"`
 
 	// Upload Custom upload configuration for output files to external storage providers
@@ -662,15 +662,18 @@ type JobCreationResponse struct {
 // JobCreationResponseStatus 'queued' for regular jobs, 'pending' for parent jobs waiting on children
 type JobCreationResponseStatus string
 
-// JobTemplate Template configuration defining the After Effects project and composition to render
+// JobTemplate Template configuration defining the After Effects project and composition to render. Provide exactly one of `id` (an uploaded template) or `src` (a template URL); sending both, or neither, is rejected.
 type JobTemplate struct {
 	// Composition Name of the specific composition within the template to render (optional for .mogrt)
 	Composition *string `json:"composition"`
 
-	// Id Unique template identifier in ULID format (26 characters, uppercase alphanumeric)
-	Id string `json:"id"`
+	// Id Unique template identifier in ULID format (26 characters, uppercase alphanumeric). Use instead of `src`.
+	Id *string `json:"id,omitempty"`
 
-	// Src Source URL to the After Effects template (.aep, .mogrt, or .zip file)
+	// Name Project file name. Required with `src`: for a .zip, the path of the .aep inside the archive (for example `project/main.aep`); otherwise the file name of the .aep or .mogrt. With `id`, it defaults to the name detected when the template was uploaded.
+	Name *string `json:"name,omitempty"`
+
+	// Src Use instead of `id`. Public HTTP(S), native s3:/gs:, inline data:, or a file: URL inside the current job work directory for an After Effects template (.aep, .mogrt, or .zip file). The worker rejects paths and symlinks escaping that directory and non-public network destinations. Requires `name`.
 	Src                  *string                `json:"src,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
@@ -1517,6 +1520,14 @@ func (a *JobTemplate) UnmarshalJSON(b []byte) error {
 		delete(object, "id")
 	}
 
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
 	if raw, found := object["src"]; found {
 		err = json.Unmarshal(raw, &a.Src)
 		if err != nil {
@@ -1551,9 +1562,18 @@ func (a JobTemplate) MarshalJSON() ([]byte, error) {
 		}
 	}
 
-	object["id"], err = json.Marshal(a.Id)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	if a.Name != nil {
+		object["name"], err = json.Marshal(a.Name)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'name': %w", err)
+		}
 	}
 
 	if a.Src != nil {
