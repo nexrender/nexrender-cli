@@ -64,11 +64,7 @@ func newBatchSubmitCommand(state *State) *cobra.Command {
 			case response.StatusCode() == http.StatusOK && response.JSON200 != nil:
 				// A retry with a batchId the API already knows: it created only what was missing.
 				result := *response.JSON200
-				summary := fmt.Sprintf("Batch %s already existed; created the missing jobs (%d of %d now exist)", result.BatchId, result.SuccessCount, result.TotalJobs)
-				if result.Status == api.BatchCreationResponseStatusReplayed {
-					summary = "Batch " + result.BatchId + " already existed; no new jobs were created"
-				}
-				return state.Printer(state.Out).Success(result, summary, nil)
+				return state.Printer(state.Out).Success(result, replaySummary(result), nil)
 			}
 			failure := client.HTTPError(response.StatusCode(), response.Body, responseHeaders(response.HTTPResponse))
 			if response.StatusCode() == http.StatusServiceUnavailable && payload.BatchId != nil {
@@ -188,4 +184,20 @@ func newBatchCancelCommand(state *State) *cobra.Command {
 	}
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "confirm cancellation")
 	return cmd
+}
+
+// replaySummary describes what a retry with a known batchId did. A partial replay can still
+// report jobs that could not be created, as a 201 partial batch does.
+func replaySummary(result api.BatchCreationResponse) string {
+	if result.Status == api.BatchCreationResponseStatusReplayed {
+		return "Batch " + result.BatchId + " already existed; no new jobs were created"
+	}
+	failed := 0
+	if result.Errors != nil {
+		failed = len(*result.Errors)
+	}
+	if failed > 0 {
+		return fmt.Sprintf("Batch %s already existed; created some missing jobs, but %d could not be created (see errors). %d of %d jobs exist", result.BatchId, failed, result.SuccessCount, result.TotalJobs)
+	}
+	return fmt.Sprintf("Batch %s already existed; created the missing jobs (%d of %d now exist)", result.BatchId, result.SuccessCount, result.TotalJobs)
 }

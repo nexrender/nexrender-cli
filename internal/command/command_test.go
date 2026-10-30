@@ -111,6 +111,22 @@ func TestBatchSubmitKeepsBatchIDAndAcceptsReplay(t *testing.T) {
 	}
 }
 
+func TestBatchReplaySummaryReportsJobsThatStillFailed(t *testing.T) {
+	var result api.BatchCreationResponse
+	body := `{"batchId":"01ARZ3NDEKTSV4RRFFQ69G5FAV","status":"partial","totalJobs":3,"successCount":2,"jobs":[],"errors":[{"index":2,"error":"Template not found","errorCode":"TEMPLATE_NOT_FOUND"}]}`
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
+		t.Fatal(err)
+	}
+	summary := replaySummary(result)
+	if !strings.Contains(summary, "1 could not be created") || !strings.Contains(summary, "2 of 3 jobs exist") {
+		t.Fatalf("summary does not report the failure: %q", summary)
+	}
+	result.Errors = nil
+	if summary := replaySummary(result); !strings.Contains(summary, "created the missing jobs (2 of 3 now exist)") {
+		t.Fatalf("unexpected summary without errors: %q", summary)
+	}
+}
+
 func TestTemplateUploadDoesNotForwardBearer(t *testing.T) {
 	var uploaded []byte
 	uploadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
