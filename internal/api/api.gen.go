@@ -438,7 +438,7 @@ type JobAsset struct {
 	// Params Optional parameters for function assets. For supported NX layer functions (`nx:layer-autoscale`, `nx:layer-duration-set`, `nx:layer-start-set`, `nx:layer-state-set`, `nx:solid-color-set`, `nx:text-params-set`), `params.layerName` accepts a single string or an array of strings. When an array is provided, the API expands the function asset into multiple per-layer assets while preserving the original `assets` order.
 	Params *JobAsset_Params `json:"params,omitempty"`
 
-	// Src Source URL, script data or file path for the asset (supports HTTP/HTTPS URLs or local paths)
+	// Src Public HTTP(S), native s3:/gs:, inline data:, or a file: URL inside the current job work directory. The worker rejects local paths and symlinks escaping that directory. Other schemes and non-public network destinations are rejected.
 	Src *string `json:"src,omitempty"`
 
 	// Type Asset type (e.g., image, video, audio, text, data, script, job)
@@ -485,6 +485,9 @@ type JobAssetNested struct {
 
 		// Frames Frame specification for image output
 		Frames *JobAssetNested_Settings_Frames `json:"frames,omitempty"`
+
+		// MultiFrame Turn After Effects Multi-Frame Rendering on (true) or off (false) for the child job. If omitted, the worker's own setting applies
+		MultiFrame *bool `json:"multiFrame,omitempty"`
 
 		// Quality Render quality
 		Quality *JobAssetNestedSettingsQuality `json:"quality,omitempty"`
@@ -563,6 +566,9 @@ type JobCreation struct {
 		// Frames Frame specification - single frame number or [start, end] range. Required for image type.
 		Frames *JobCreation_Settings_Frames `json:"frames,omitempty"`
 
+		// MultiFrame Turn After Effects Multi-Frame Rendering on (true) or off (false) for this job. If omitted, the worker's own setting applies
+		MultiFrame *bool `json:"multiFrame,omitempty"`
+
 		// Quality Render quality setting - 'draft' for faster low-quality preview, 'full' for high-quality output
 		Quality *JobCreationSettingsQuality `json:"quality,omitempty"`
 
@@ -592,7 +598,7 @@ type JobCreation struct {
 			// Bucket Target bucket name for file uploads (required)
 			Bucket string `json:"bucket"`
 
-			// Endpoint Custom S3-compatible endpoint URL
+			// Endpoint Public HTTP(S) S3-compatible endpoint URL. Explicit customer credentials are required; worker credentials are not used for arbitrary endpoints.
 			Endpoint *string `json:"endpoint,omitempty"`
 
 			// Region AWS region or storage region identifier (required)
@@ -722,9 +728,12 @@ type JoinJobAsset struct {
 		Codec *string `json:"codec,omitempty"`
 
 		// Engine After Effects render engine version for the child job
-		Engine  *JoinJobAssetSettingsEngine   `json:"engine,omitempty"`
-		Frames  *JoinJobAsset_Settings_Frames `json:"frames,omitempty"`
-		Quality *JoinJobAssetSettingsQuality  `json:"quality,omitempty"`
+		Engine *JoinJobAssetSettingsEngine   `json:"engine,omitempty"`
+		Frames *JoinJobAsset_Settings_Frames `json:"frames,omitempty"`
+
+		// MultiFrame Turn After Effects Multi-Frame Rendering on (true) or off (false) for the child job. If omitted, the worker's own setting applies
+		MultiFrame *bool                        `json:"multiFrame,omitempty"`
+		Quality    *JoinJobAssetSettingsQuality `json:"quality,omitempty"`
 	} `json:"settings,omitempty"`
 
 	// Template Template configuration for the child job
@@ -765,7 +774,7 @@ type JoinJobAssetType string
 
 // JoinJobCreation Configuration for creating a join/stitch job that combines multiple videos into one
 type JoinJobCreation struct {
-	// Assets Ordered list of video or job assets to stitch together
+	// Assets Ordered list of video or job assets to stitch together. A join needs at least two inputs.
 	Assets []JoinJobCreation_Assets_Item `json:"assets"`
 
 	// Settings Settings for the stitch/join operation

@@ -54,7 +54,7 @@
         "properties": {
           "src": {
             "type": "string",
-            "description": "Source URL, script data or file path for the asset (supports HTTP/HTTPS URLs or local paths)"
+            "description": "Public HTTP(S), native s3:/gs:, inline data:, or a file: URL inside the current job work directory. The worker rejects local paths and symlinks escaping that directory. Other schemes and non-public network destinations are rejected."
           },
           "type": {
             "type": "string",
@@ -178,6 +178,10 @@
                 "enum": ["ae2025", "ae2026"],
                 "default": "ae2026",
                 "description": "After Effects render engine version for the child job"
+              },
+              "multiFrame": {
+                "type": "boolean",
+                "description": "Turn After Effects Multi-Frame Rendering on (true) or off (false) for the child job. If omitted, the worker's own setting applies"
               }
             }
           }
@@ -263,6 +267,10 @@
                 "enum": ["ae2025", "ae2026"],
                 "default": "ae2026",
                 "description": "After Effects render engine version for the child job"
+              },
+              "multiFrame": {
+                "type": "boolean",
+                "description": "Turn After Effects Multi-Frame Rendering on (true) or off (false) for the child job. If omitted, the worker's own setting applies"
               }
             }
           }
@@ -289,7 +297,7 @@
           },
           "assets": {
             "type": "array",
-            "description": "Ordered list of video or job assets to stitch together",
+            "description": "Ordered list of video or job assets to stitch together. A join needs at least two inputs.",
             "items": {
               "oneOf": [
                 { "$ref": "#/components/schemas/JoinVideoAsset" },
@@ -303,7 +311,7 @@
                 }
               }
             },
-            "minItems": 1
+            "minItems": 2
           },
           "upload": {
             "type": "object",
@@ -528,6 +536,10 @@
                 "enum": ["ae2025", "ae2026"],
                 "default": "ae2026",
                 "description": "After Effects render engine version used when the job is picked up by a worker"
+              },
+              "multiFrame": {
+                "type": "boolean",
+                "description": "Turn After Effects Multi-Frame Rendering on (true) or off (false) for this job. If omitted, the worker's own setting applies"
               }
             },
             "additionalProperties": false
@@ -557,7 +569,7 @@
                   "endpoint": {
                     "type": "string",
                     "default": "https://s3.amazonaws.com",
-                    "description": "Custom S3-compatible endpoint URL"
+                    "description": "Public HTTP(S) S3-compatible endpoint URL. Explicit customer credentials are required; worker credentials are not used for arbitrary endpoints."
                   },
                   "region": {
                     "type": "string",
@@ -714,6 +726,7 @@
           },
           "displayName": {
             "type": "string",
+            "maxLength": 255,
             "description": "Human-readable name for the template shown in UI and listings"
           },
           "src": {
@@ -732,6 +745,7 @@
         "properties": {
           "displayName": {
             "type": "string",
+            "maxLength": 255,
             "description": "Updated human-readable name for the template"
           }
         }
