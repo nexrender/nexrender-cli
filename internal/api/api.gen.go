@@ -38,9 +38,10 @@ const (
 
 // Defines values for BatchCreationResponseStatus.
 const (
-	BatchCreationResponseStatusCreated BatchCreationResponseStatus = "created"
-	BatchCreationResponseStatusError   BatchCreationResponseStatus = "error"
-	BatchCreationResponseStatusPartial BatchCreationResponseStatus = "partial"
+	BatchCreationResponseStatusCreated  BatchCreationResponseStatus = "created"
+	BatchCreationResponseStatusError    BatchCreationResponseStatus = "error"
+	BatchCreationResponseStatusPartial  BatchCreationResponseStatus = "partial"
+	BatchCreationResponseStatusReplayed BatchCreationResponseStatus = "replayed"
 )
 
 // Defines values for BatchStatusResponseStatus.
@@ -234,7 +235,10 @@ type BatchCancellationResponseStatus string
 
 // BatchCreation Configuration for creating a batch of render jobs in a single request (1 to 1000 jobs)
 type BatchCreation struct {
-	// Jobs Array of job configurations to create as a batch. Each item follows the same schema as a single job creation request.
+	// BatchId Optional client-chosen ULID that makes the request safe to retry. Sending a batch again with the same batchId creates only the jobs that are not in it yet: the response is 200 with status 'replayed' when nothing was missing, or 'partial' when the missing jobs were created. Retries are recognised for 30 days, while the batch's jobs are kept. Requests with the same batchId must not run at the same time: two that overlap on the server can both create jobs. A timeout on your side does not mean the server stopped processing, so after a timeout wait until GET /batches/{id} stops changing before retrying. Without it the API generates one, and a retry creates a new batch.
+	BatchId *string `json:"batchId,omitempty"`
+
+	// Jobs Array of job configurations to create as a batch. Each item follows the same schema as a single job creation request, plus an optional `batchItemId` string (at most 255 characters) that identifies the job within the batch when it is retried. Items without one are matched by their position.
 	Jobs []JobCreation `json:"jobs"`
 }
 
@@ -242,6 +246,12 @@ type BatchCreation struct {
 type BatchCreationResponse struct {
 	// BatchId Unique batch identifier in ULID format for tracking the entire batch
 	BatchId string `json:"batchId"`
+
+	// Error Present on 409 and 503 responses: why the batch could not be completed
+	Error *string `json:"error,omitempty"`
+
+	// ErrorCode Present on 409 and 503 responses, for example BATCH_ALREADY_PARTIAL or BATCH_RETRYABLE
+	ErrorCode *string `json:"errorCode,omitempty"`
 
 	// Errors Array of errors for failed jobs (only present when status is 'partial' or 'error')
 	Errors *[]struct {
@@ -281,7 +291,7 @@ type BatchCreationResponse struct {
 		Status *string `json:"status,omitempty"`
 	} `json:"jobs"`
 
-	// Status 'created' if all jobs succeeded, 'partial' if some failed, 'error' if all failed
+	// Status 'created' if all jobs succeeded, 'partial' if some failed or a retry created only the missing jobs, 'error' if all failed, 'replayed' if a retry with the same batchId found every job already created
 	Status BatchCreationResponseStatus `json:"status"`
 
 	// SuccessCount Number of successfully created jobs
@@ -291,7 +301,7 @@ type BatchCreationResponse struct {
 	TotalJobs int `json:"totalJobs"`
 }
 
-// BatchCreationResponseStatus 'created' if all jobs succeeded, 'partial' if some failed, 'error' if all failed
+// BatchCreationResponseStatus 'created' if all jobs succeeded, 'partial' if some failed or a retry created only the missing jobs, 'error' if all failed, 'replayed' if a retry with the same batchId found every job already created
 type BatchCreationResponseStatus string
 
 // BatchStatusResponse Current status and progress of a batch of jobs
@@ -566,7 +576,7 @@ type JobCreation struct {
 		Type *JobCreationSettingsType `json:"type,omitempty"`
 	} `json:"settings,omitempty"`
 
-	// Template Template configuration defining the After Effects project and composition to render
+	// Template Template configuration defining the After Effects project and composition to render. Provide exactly one of `id` (an uploaded template) or `src` (a template URL); sending both, or neither, is rejected.
 	Template JobTemplate `json:"template"`
 
 	// Upload Custom upload configuration for output files to external storage providers
@@ -668,15 +678,18 @@ type JobCreationResponse struct {
 // JobCreationResponseStatus 'queued' for regular jobs, 'pending' for parent jobs waiting on children
 type JobCreationResponseStatus string
 
-// JobTemplate Template configuration defining the After Effects project and composition to render
+// JobTemplate Template configuration defining the After Effects project and composition to render. Provide exactly one of `id` (an uploaded template) or `src` (a template URL); sending both, or neither, is rejected.
 type JobTemplate struct {
 	// Composition Name of the specific composition within the template to render (optional for .mogrt)
 	Composition *string `json:"composition"`
 
-	// Id Unique template identifier in ULID format (26 characters, uppercase alphanumeric)
-	Id string `json:"id"`
+	// Id Unique template identifier in ULID format (26 characters, uppercase alphanumeric). Use instead of `src`.
+	Id *string `json:"id,omitempty"`
 
-	// Src Public HTTP(S), native s3:/gs:, inline data:, or a file: URL inside the current job work directory for an After Effects template (.aep, .mogrt, or .zip file). The worker rejects paths and symlinks escaping that directory and non-public network destinations.
+	// Name Project file name. Required with `src`: for a .zip, the path of the .aep inside the archive (for example `project/main.aep`); otherwise the file name of the .aep or .mogrt. With `id`, it defaults to the name detected when the template was uploaded.
+	Name *string `json:"name,omitempty"`
+
+	// Src Use instead of `id`. Public HTTP(S), native s3:/gs:, inline data:, or a file: URL inside the current job work directory for an After Effects template (.aep, .mogrt, or .zip file). The worker rejects paths and symlinks escaping that directory and non-public network destinations. Requires `name`.
 	Src                  *string                `json:"src,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
@@ -761,7 +774,7 @@ type JoinJobAssetType string
 
 // JoinJobCreation Configuration for creating a join/stitch job that combines multiple videos into one
 type JoinJobCreation struct {
-	// Assets Ordered list of video or job assets to stitch together
+	// Assets Ordered list of video or job assets to stitch together. A join needs at least two inputs.
 	Assets []JoinJobCreation_Assets_Item `json:"assets"`
 
 	// Settings Settings for the stitch/join operation
@@ -1526,6 +1539,14 @@ func (a *JobTemplate) UnmarshalJSON(b []byte) error {
 		delete(object, "id")
 	}
 
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
 	if raw, found := object["src"]; found {
 		err = json.Unmarshal(raw, &a.Src)
 		if err != nil {
@@ -1560,9 +1581,18 @@ func (a JobTemplate) MarshalJSON() ([]byte, error) {
 		}
 	}
 
-	object["id"], err = json.Marshal(a.Id)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	if a.Name != nil {
+		object["name"], err = json.Marshal(a.Name)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'name': %w", err)
+		}
 	}
 
 	if a.Src != nil {
@@ -3931,10 +3961,13 @@ type ClientWithResponsesInterface interface {
 type CreateBatchResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *BatchCreationResponse
 	JSON201      *BatchCreationResponse
 	JSON400      *BatchCreationResponse
 	JSON401      *ErrorResponse
 	JSON403      *ErrorResponse
+	JSON409      *BatchCreationResponse
+	JSON503      *BatchCreationResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -4939,6 +4972,13 @@ func ParseCreateBatchResponse(rsp *http.Response) (*CreateBatchResponse, error) 
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BatchCreationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 		var dest BatchCreationResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4966,6 +5006,20 @@ func ParseCreateBatchResponse(rsp *http.Response) (*CreateBatchResponse, error) 
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest BatchCreationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest BatchCreationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

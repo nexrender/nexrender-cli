@@ -118,6 +118,8 @@ nexrender batch submit --file campaign.json
 nexrender batch wait BATCH_ID
 ```
 
+To make a batch safe to resubmit, give it a `batchId` (a ULID you choose) and, optionally, each job a unique `batchItemId`. Submitting the same file again creates only the jobs that are missing. Wait until the first attempt has finished on the server first: a local timeout is not enough, so check `nexrender batch show BATCH_ID` until it stops changing.
+
 Fonts and encrypted secrets are along for the ride too:
 
 ```bash

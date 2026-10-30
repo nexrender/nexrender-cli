@@ -297,7 +297,7 @@
           },
           "assets": {
             "type": "array",
-            "description": "Ordered list of video or job assets to stitch together",
+            "description": "Ordered list of video or job assets to stitch together. A join needs at least two inputs.",
             "items": {
               "oneOf": [
                 { "$ref": "#/components/schemas/JoinVideoAsset" },
@@ -311,7 +311,7 @@
                 }
               }
             },
-            "minItems": 1
+            "minItems": 2
           },
           "upload": {
             "type": "object",
@@ -433,16 +433,20 @@
       },
       "JobTemplate": {
         "type": "object",
-        "description": "Template configuration defining the After Effects project and composition to render",
+        "description": "Template configuration defining the After Effects project and composition to render. Provide exactly one of `id` (an uploaded template) or `src` (a template URL); sending both, or neither, is rejected.",
         "properties": {
           "id": {
             "type": "string",
             "pattern": "^[A-Z0-9]{26}$",
-            "description": "Unique template identifier in ULID format (26 characters, uppercase alphanumeric)"
+            "description": "Unique template identifier in ULID format (26 characters, uppercase alphanumeric). Use instead of `src`."
           },
           "src": {
             "type": "string",
-            "description": "Public HTTP(S), native s3:/gs:, inline data:, or a file: URL inside the current job work directory for an After Effects template (.aep, .mogrt, or .zip file). The worker rejects paths and symlinks escaping that directory and non-public network destinations."
+            "description": "Use instead of `id`. Public HTTP(S), native s3:/gs:, inline data:, or a file: URL inside the current job work directory for an After Effects template (.aep, .mogrt, or .zip file). The worker rejects paths and symlinks escaping that directory and non-public network destinations. Requires `name`."
+          },
+          "name": {
+            "type": "string",
+            "description": "Project file name. Required with `src`: for a .zip, the path of the .aep inside the archive (for example `project/main.aep`); otherwise the file name of the .aep or .mogrt. With `id`, it defaults to the name detected when the template was uploaded."
           },
           "composition": {
             "type": "string",
@@ -450,9 +454,6 @@
             "nullable": true
           }
         },
-        "required": [
-          "id"
-        ],
         "additionalProperties": true
       },
       "JobCreation": {
@@ -935,9 +936,14 @@
         "type": "object",
         "description": "Configuration for creating a batch of render jobs in a single request (1 to 1000 jobs)",
         "properties": {
+          "batchId": {
+            "type": "string",
+            "pattern": "^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
+            "description": "Optional client-chosen ULID that makes the request safe to retry. Sending a batch again with the same batchId creates only the jobs that are not in it yet: the response is 200 with status 'replayed' when nothing was missing, or 'partial' when the missing jobs were created. Retries are recognised for 30 days, while the batch's jobs are kept. Requests with the same batchId must not run at the same time: two that overlap on the server can both create jobs. A timeout on your side does not mean the server stopped processing, so after a timeout wait until GET /batches/{id} stops changing before retrying. Without it the API generates one, and a retry creates a new batch."
+          },
           "jobs": {
             "type": "array",
-            "description": "Array of job configurations to create as a batch. Each item follows the same schema as a single job creation request.",
+            "description": "Array of job configurations to create as a batch. Each item follows the same schema as a single job creation request, plus an optional `batchItemId` string (at most 255 characters) that identifies the job within the batch when it is retried. Items without one are matched by their position.",
             "items": {
               "$ref": "#/components/schemas/JobCreation"
             },
@@ -957,8 +963,8 @@
           },
           "status": {
             "type": "string",
-            "enum": ["created", "partial", "error"],
-            "description": "'created' if all jobs succeeded, 'partial' if some failed, 'error' if all failed"
+            "enum": ["created", "partial", "error", "replayed"],
+            "description": "'created' if all jobs succeeded, 'partial' if some failed or a retry created only the missing jobs, 'error' if all failed, 'replayed' if a retry with the same batchId found every job already created"
           },
           "totalJobs": {
             "type": "integer",
@@ -967,6 +973,14 @@
           "successCount": {
             "type": "integer",
             "description": "Number of successfully created jobs"
+          },
+          "error": {
+            "type": "string",
+            "description": "Present on 409 and 503 responses: why the batch could not be completed"
+          },
+          "errorCode": {
+            "type": "string",
+            "description": "Present on 409 and 503 responses, for example BATCH_ALREADY_PARTIAL or BATCH_RETRYABLE"
           },
           "jobs": {
             "type": "array",
@@ -3175,8 +3189,44 @@
               }
             }
           },
+          "200": {
+            "description": "A retry with an existing batchId. Status 'replayed' when every job already existed, 'partial' when the missing jobs were created now.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchCreationResponse"
+                }
+              }
+            }
+          },
           "400": {
-            "description": "Invalid request or all jobs in the batch failed",
+            "description": "Invalid request (including INVALID_BATCH_ID) or all jobs in the batch failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchCreationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "BATCH_ALREADY_PARTIAL: a retry with an existing batchId could not reconcile the jobs already in the batch with the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchCreationResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "BATCH_RETRYABLE: the database was briefly unavailable part-way through. The jobs created so far are listed. Retry with the same batchId after Retry-After seconds to create only the rest.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying",
+                "schema": { "type": "integer" }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {

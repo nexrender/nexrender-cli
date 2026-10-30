@@ -80,6 +80,53 @@ func TestJobListUsesV2AndBearerAuth(t *testing.T) {
 	}
 }
 
+func TestBatchSubmitKeepsBatchIDAndAcceptsReplay(t *testing.T) {
+	var sent map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v2/batches" {
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&sent); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, `{"batchId":"01ARZ3NDEKTSV4RRFFQ69G5FAV","status":"replayed","totalJobs":1,"successCount":1,"jobs":[{"index":0,"id":"01ARZ3NDEKTSV4RRFFQ69G5FA0","status":"queued","outputUrl":"https://out.example.test/a.mp4"}]}`)
+	}))
+	defer server.Close()
+	batch := `{"batchId":"01ARZ3NDEKTSV4RRFFQ69G5FAV","jobs":[{"template":{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAW","composition":"Main"},"batchItemId":"hero"}]}`
+	state, out, _ := testState(t, server.URL+"/api/v2", strings.NewReader(batch))
+	if code := Execute(context.Background(), state, []string{"--json", "batch", "submit"}); code != 0 {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if sent["batchId"] != "01ARZ3NDEKTSV4RRFFQ69G5FAV" {
+		t.Fatalf("batchId was not sent: %v", sent)
+	}
+	jobs, _ := sent["jobs"].([]any)
+	if len(jobs) != 1 || jobs[0].(map[string]any)["batchItemId"] != "hero" {
+		t.Fatalf("batchItemId was not sent: %v", sent["jobs"])
+	}
+	if !strings.Contains(out.String(), `"replayed"`) || !strings.Contains(out.String(), "no new jobs were created") {
+		t.Fatalf("unexpected output: %s", out.String())
+	}
+}
+
+func TestBatchReplaySummaryReportsJobsThatStillFailed(t *testing.T) {
+	var result api.BatchCreationResponse
+	body := `{"batchId":"01ARZ3NDEKTSV4RRFFQ69G5FAV","status":"partial","totalJobs":3,"successCount":2,"jobs":[],"errors":[{"index":2,"error":"Template not found","errorCode":"TEMPLATE_NOT_FOUND"}]}`
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
+		t.Fatal(err)
+	}
+	summary := replaySummary(result)
+	if !strings.Contains(summary, "1 could not be created") || !strings.Contains(summary, "2 of 3 jobs exist") {
+		t.Fatalf("summary does not report the failure: %q", summary)
+	}
+	result.Errors = nil
+	if summary := replaySummary(result); !strings.Contains(summary, "created the missing jobs (2 of 3 now exist)") {
+		t.Fatalf("unexpected summary without errors: %q", summary)
+	}
+}
+
 func TestTemplateUploadDoesNotForwardBearer(t *testing.T) {
 	var uploaded []byte
 	uploadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

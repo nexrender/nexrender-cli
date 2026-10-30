@@ -3,7 +3,7 @@
 ## Job payloads
 
 - Layer names are case-sensitive. Use the `name` returned by `template layers` as `layerName`.
-- Codec identifiers use their full prefix, such as `video_h264_vbr_15mbps`, `image_png`, or `video_prores_422`.
+- Codecs can be given by their short name (`h264_vbr_15mbps`, `prores_422`, `png`, `gif`) or in full (`video_h264_vbr_15mbps`, `image_png`). The API rejects unknown codecs and lists the supported ones.
 - `preview: true` and `settings` are mutually exclusive. Preview mode ignores normal output settings.
 - `settings.multiFrame` turns After Effects Multi-Frame Rendering on (`true`) or off (`false`) for one job. Leave it out to keep the render node's default. Set `false` when a template renders incorrectly with Multi-Frame Rendering.
 - `${secrets.NAME}` is the secret reference form.
