@@ -43,3 +43,21 @@ func TestValidateProfileName(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeServerDerivesTheAPIBase(t *testing.T) {
+	cases := map[string]string{
+		"https://api.nexrender.com":                 "https://api.nexrender.com/api/v2",
+		" https://staging.api.nexrender.com/ ":      "https://staging.api.nexrender.com/api/v2",
+		"https://staging.api.nexrender.com/api":     "https://staging.api.nexrender.com/api/v2",
+		"https://staging.api.nexrender.com/api/v2":  "https://staging.api.nexrender.com/api/v2",
+		"http://127.0.0.1:3000":                     "http://127.0.0.1:3000/api/v2",
+		"https://gateway.example.test/nexrender/v2": "https://gateway.example.test/nexrender/v2",
+		"":          "",
+		"not a url": "not a url",
+	}
+	for input, want := range cases {
+		if got := NormalizeServer(input); got != want {
+			t.Errorf("NormalizeServer(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
