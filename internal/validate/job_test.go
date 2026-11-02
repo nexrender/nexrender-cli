@@ -87,3 +87,31 @@ func TestJobPayloadKeepsMultiFrame(t *testing.T) {
 		t.Fatalf("submitted payload %s should leave multiFrame out when it is not set", encoded)
 	}
 }
+
+// job submit sends the re-marshalled payload, so a settings field missing from the
+// generated types is dropped without an error.
+func TestJobPayloadKeepsLottieSettings(t *testing.T) {
+	payload, err := JobPayload([]byte(`{"template":{"id":"x"},"settings":{"type":"lottie","lottie":{"should_encode_images":true}}}`))
+	if err != nil {
+		t.Fatalf("payload failed: %v", err)
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	var sent struct {
+		Settings struct {
+			Type   string         `json:"type"`
+			Lottie map[string]any `json:"lottie"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(encoded, &sent); err != nil {
+		t.Fatalf("unmarshal submitted payload: %v", err)
+	}
+	if sent.Settings.Type != "lottie" {
+		t.Fatalf("submitted payload %s lost settings.type", encoded)
+	}
+	if sent.Settings.Lottie["should_encode_images"] != true {
+		t.Fatalf("submitted payload %s lost settings.lottie", encoded)
+	}
+}
