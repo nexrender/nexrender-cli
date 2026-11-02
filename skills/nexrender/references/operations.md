@@ -6,6 +6,7 @@
 - Codecs can be given by their short name (`h264_vbr_15mbps`, `prores_422`, `png`, `gif`) or in full (`video_h264_vbr_15mbps`, `image_png`). The API rejects unknown codecs and lists the supported ones.
 - `preview: true` and `settings` are mutually exclusive. Preview mode ignores normal output settings.
 - `settings.multiFrame` turns After Effects Multi-Frame Rendering on (`true`) or off (`false`) for one job. Leave it out to keep the render node's default. Set `false` when a template renders incorrectly with Multi-Frame Rendering.
+- `settings.type: "lottie"` exports the template to Lottie instead of rendering a video. Bodymovin's settings go in `settings.lottie`, and `frames`, `codec` and `quality` are refused with it. The output is a zip of a `lottie/` folder. See [api.md](api.md#lottie-export).
 - `${secrets.NAME}` is the secret reference form.
 - `missingFonts` is a visual-correctness warning. A render may finish with fallback fonts and still be wrong.
 

@@ -94,6 +94,10 @@ nexrender job submit --file job.json --dry-run
 nexrender job submit --file job.json --wait
 ```
 
+`--dry-run` checks the payload locally. The API runs its own checks when you submit, so it can still refuse a payload that passed.
+
+Export a Lottie animation instead of a video by setting `settings.type` to `"lottie"` and passing Bodymovin's settings in `settings.lottie` (see [Lottie export](https://docs.nexrender.com/cloud/jobs/initiating_renders#lottie-export)). The output is a zip of a `lottie/` folder.
+
 Bring in a new After Effects template and learn what is inside it:
 
 ```bash
