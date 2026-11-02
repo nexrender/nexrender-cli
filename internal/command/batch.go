@@ -48,7 +48,7 @@ func newBatchSubmitCommand(state *State) *cobra.Command {
 				}
 			}
 			if dryRun {
-				return state.Printer(state.Out).Success(payload, fmt.Sprintf("%d batch jobs are valid; no jobs were created", len(payload.Jobs)), func(w io.Writer) error { return printJSON(w, payload) })
+				return state.Printer(state.Out).Success(payload, fmt.Sprintf("%d batch jobs passed local checks; no jobs were created", len(payload.Jobs)), func(w io.Writer) error { return printJSON(w, payload) })
 			}
 			apiClient, _, err := state.API()
 			if err != nil {
@@ -76,7 +76,7 @@ func newBatchSubmitCommand(state *State) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "-", "batch JSON file, or - for stdin")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate without creating jobs")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate locally without creating jobs; the API can still refuse them")
 	return cmd
 }
 

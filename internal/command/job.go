@@ -77,7 +77,7 @@ func newJobJoinCommand(state *State) *cobra.Command {
 				return clierr.Validation("join payload requires at least one asset", "Add ordered video or job assets.")
 			}
 			if dryRun {
-				return state.Printer(state.Out).Success(payload, "Join payload is valid; no job was created", func(w io.Writer) error { return printJSON(w, payload) })
+				return state.Printer(state.Out).Success(payload, "Join payload passed local checks; no job was created", func(w io.Writer) error { return printJSON(w, payload) })
 			}
 			apiClient, _, err := state.API()
 			if err != nil {
@@ -94,7 +94,7 @@ func newJobJoinCommand(state *State) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "-", "join JSON file, or - for stdin")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate without creating a job")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate locally without creating a job; the API can still refuse the payload")
 	return cmd
 }
 
@@ -242,7 +242,7 @@ func newJobSubmitCommand(state *State) *cobra.Command {
 				return err
 			}
 			if dryRun {
-				return state.Printer(state.Out).Success(payload, "Job payload is valid; no job was created", func(w io.Writer) error { return printJSON(w, payload) })
+				return state.Printer(state.Out).Success(payload, "Job payload passed local checks; no job was created", func(w io.Writer) error { return printJSON(w, payload) })
 			}
 			apiClient, _, err := state.API()
 			if err != nil {
@@ -273,7 +273,7 @@ func newJobSubmitCommand(state *State) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "-", "job JSON file, or - for stdin")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate without creating a job")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate locally without creating a job; the API can still refuse the payload")
 	cmd.Flags().BoolVar(&wait, "wait", false, "wait for a terminal job state")
 	cmd.Flags().DurationVar(&interval, "interval", 2*time.Second, "polling interval when waiting")
 	cmd.Flags().DurationVar(&waitTimeout, "wait-timeout", 30*time.Minute, "maximum time to wait")

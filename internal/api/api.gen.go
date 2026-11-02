@@ -88,9 +88,10 @@ const (
 
 // Defines values for JobCreationSettingsType.
 const (
-	JobCreationSettingsTypeAep   JobCreationSettingsType = "aep"
-	JobCreationSettingsTypeImage JobCreationSettingsType = "image"
-	JobCreationSettingsTypeVideo JobCreationSettingsType = "video"
+	JobCreationSettingsTypeAep    JobCreationSettingsType = "aep"
+	JobCreationSettingsTypeImage  JobCreationSettingsType = "image"
+	JobCreationSettingsTypeLottie JobCreationSettingsType = "lottie"
+	JobCreationSettingsTypeVideo  JobCreationSettingsType = "video"
 )
 
 // Defines values for JobCreationUploadProvider.
@@ -563,8 +564,11 @@ type JobCreation struct {
 		// Engine After Effects render engine version used when the job is picked up by a worker
 		Engine *JobCreationSettingsEngine `json:"engine,omitempty"`
 
-		// Frames Frame specification - single frame number or [start, end] range. Required for image type.
+		// Frames Frame specification - single frame number, [start, end] range or [start, end, skip]. Required for image type unless an nx:preview image function names the frame.
 		Frames *JobCreation_Settings_Frames `json:"frames,omitempty"`
+
+		// Lottie Bodymovin settings for a 'lottie' job, e.g. export_modes, should_encode_images, rasterize_text. Only some settings can be changed; see the Lottie docs. Not allowed with other types.
+		Lottie *map[string]interface{} `json:"lottie,omitempty"`
 
 		// MultiFrame Turn After Effects Multi-Frame Rendering on (true) or off (false) for this job. If omitted, the worker's own setting applies
 		MultiFrame *bool `json:"multiFrame,omitempty"`
@@ -572,7 +576,7 @@ type JobCreation struct {
 		// Quality Render quality setting - 'draft' for faster low-quality preview, 'full' for high-quality output
 		Quality *JobCreationSettingsQuality `json:"quality,omitempty"`
 
-		// Type Output render type - 'video' for MP4/MOV files, 'image' for PNG/JPG files, 'aep' for full archive
+		// Type Output render type - 'video' for MP4/MOV files, 'image' for PNG/JPG files, 'aep' for full archive, 'lottie' for a zip of a Lottie export (the team needs Lottie access)
 		Type *JobCreationSettingsType `json:"type,omitempty"`
 	} `json:"settings,omitempty"`
 
@@ -628,10 +632,10 @@ type JobCreationSettingsEngine string
 // JobCreationSettingsFrames0 Single frame number to render as image
 type JobCreationSettingsFrames0 = int
 
-// JobCreationSettingsFrames1 Frame range [start, end] where end > start
+// JobCreationSettingsFrames1 Frame range [start, end] where end > start, or [start, end, skip] to render every skip-th frame. skip must be between 1 and 100. -1 asks for the default: the first frame of the composition as start, its last frame as end, or every frame as skip.
 type JobCreationSettingsFrames1 = []int
 
-// JobCreation_Settings_Frames Frame specification - single frame number or [start, end] range. Required for image type.
+// JobCreation_Settings_Frames Frame specification - single frame number, [start, end] range or [start, end, skip]. Required for image type unless an nx:preview image function names the frame.
 type JobCreation_Settings_Frames struct {
 	union json.RawMessage
 }
@@ -639,7 +643,7 @@ type JobCreation_Settings_Frames struct {
 // JobCreationSettingsQuality Render quality setting - 'draft' for faster low-quality preview, 'full' for high-quality output
 type JobCreationSettingsQuality string
 
-// JobCreationSettingsType Output render type - 'video' for MP4/MOV files, 'image' for PNG/JPG files, 'aep' for full archive
+// JobCreationSettingsType Output render type - 'video' for MP4/MOV files, 'image' for PNG/JPG files, 'aep' for full archive, 'lottie' for a zip of a Lottie export (the team needs Lottie access)
 type JobCreationSettingsType string
 
 // JobCreationUploadProvider Storage provider - 's3' for Amazon S3 compatible
@@ -4531,9 +4535,12 @@ func (r GetTemplateDownloadUrlResponse) StatusCode() int {
 type GetTemplateUploadUrlResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *TemplateUploadInfo
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
+	JSON200      *struct {
+		// UploadInfo Presigned upload URL and metadata for securely uploading template files to cloud storage
+		UploadInfo TemplateUploadInfo `json:"uploadInfo"`
+	}
+	JSON401 *ErrorResponse
+	JSON404 *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -6001,7 +6008,10 @@ func ParseGetTemplateUploadUrlResponse(rsp *http.Response) (*GetTemplateUploadUr
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest TemplateUploadInfo
+		var dest struct {
+			// UploadInfo Presigned upload URL and metadata for securely uploading template files to cloud storage
+			UploadInfo TemplateUploadInfo `json:"uploadInfo"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

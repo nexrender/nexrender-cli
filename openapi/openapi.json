@@ -499,8 +499,8 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["video", "image", "aep"],
-                "description": "Output render type - 'video' for MP4/MOV files, 'image' for PNG/JPG files, 'aep' for full archive"
+                "enum": ["video", "image", "aep", "lottie"],
+                "description": "Output render type - 'video' for MP4/MOV files, 'image' for PNG/JPG files, 'aep' for full archive, 'lottie' for a zip of a Lottie export (the team needs Lottie access)"
               },
               "frames": {
                 "oneOf": [
@@ -513,14 +513,14 @@
                     "type": "array",
                     "items": {
                       "type": "integer",
-                      "minimum": 0
+                      "minimum": -1
                     },
                     "minItems": 2,
-                    "maxItems": 2,
-                    "description": "Frame range [start, end] where end > start"
+                    "maxItems": 3,
+                    "description": "Frame range [start, end] where end > start, or [start, end, skip] to render every skip-th frame. skip must be between 1 and 100. -1 asks for the default: the first frame of the composition as start, its last frame as end, or every frame as skip."
                   }
                 ],
-                "description": "Frame specification - single frame number or [start, end] range. Required for image type."
+                "description": "Frame specification - single frame number, [start, end] range or [start, end, skip]. Required for image type unless an nx:preview image function names the frame."
               },
               "quality": {
                 "type": "string",
@@ -540,6 +540,11 @@
               "multiFrame": {
                 "type": "boolean",
                 "description": "Turn After Effects Multi-Frame Rendering on (true) or off (false) for this job. If omitted, the worker's own setting applies"
+              },
+              "lottie": {
+                "type": "object",
+                "description": "Bodymovin settings for a 'lottie' job, e.g. export_modes, should_encode_images, rasterize_text. Only some settings can be changed; see the Lottie docs. Not allowed with other types.",
+                "additionalProperties": true
               }
             },
             "additionalProperties": false
@@ -2095,7 +2100,7 @@
     "/templates/{id}/upload": {
       "put": {
         "summary": "Get fresh upload URL for template file",
-        "description": "Generate a new presigned upload URL for uploading or replacing the template file (previous URLs expire)",
+        "description": "Generate a new presigned upload URL for uploading or replacing the template file (previous URLs expire). When an already processed file is replaced, jobs and downloads keep using it until the new file has been processed. A replacement that fails processing, or is not uploaded within 24 hours, is discarded and the template keeps its previous file.",
         "x-mint": {
           "mcp": {
             "enabled": true,
@@ -2116,11 +2121,17 @@
         ],
         "responses": {
           "200": {
-            "description": "Successfully generated fresh upload URL with credentials",
+            "description": "Successfully generated fresh upload URL with credentials, wrapped in uploadInfo as in the template creation response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TemplateUploadInfo"
+                  "type": "object",
+                  "properties": {
+                    "uploadInfo": {
+                      "$ref": "#/components/schemas/TemplateUploadInfo"
+                    }
+                  },
+                  "required": ["uploadInfo"]
                 }
               }
             }

@@ -1,11 +1,11 @@
 ---
 name: nexrender
-description: Operate Nexrender Cloud from the terminal. Use for submitting, inspecting, waiting for, cancelling, or diagnosing render jobs; uploading and inspecting templates; managing batches, fonts, or secrets; and building Nexrender job payloads.
+description: Operate Nexrender Cloud from the terminal. Use for submitting, inspecting, waiting for, cancelling, or diagnosing render jobs; uploading and inspecting templates; managing batches, fonts, or secrets; exporting Lottie animations; building Nexrender job payloads; and calling the Nexrender API directly when the CLI lacks something.
 ---
 
 # Nexrender Cloud CLI
 
-Use the `nexrender` CLI for Nexrender Cloud operations. Prefer its structured output and composed workflows over raw HTTP calls.
+Use the `nexrender` CLI for Nexrender Cloud operations. Prefer its structured output and composed workflows over raw HTTP calls. The CLI is a thin wrapper over the REST API: when it cannot do what is needed, read [references/api.md](references/api.md) to call the API directly.
 
 ## Before API work
 
@@ -25,7 +25,7 @@ Use the `nexrender` CLI for Nexrender Cloud operations. Prefer its structured ou
 
 Read-only inspection and diagnosis are safe when relevant to the request. Create, cancel, delete, upload, rename, or secret-writing commands require clear user authorization. Do not infer permission to resubmit a failed job.
 
-Use `job submit --dry-run` to validate a payload before a paid render. Never retry a mutation after an ambiguous network failure. Inspect the resulting state first.
+Use `job submit --dry-run` to check a payload before a paid render. It only validates locally: the API runs its own checks on submit and can still refuse a payload that passed. Never retry a mutation after an ambiguous network failure. Inspect the resulting state first.
 
 ## Core workflows
 
@@ -35,5 +35,6 @@ Use `job submit --dry-run` to validate a payload before a paid render. Never ret
 - Diagnose a failure: `nexrender job diagnose <id> --json`
 - Upload a template: `nexrender template upload project.aep --name "Project" --json`
 - Inspect exact composition and layer names: `nexrender template compositions <id> --json` and `nexrender template layers <id> --json`
+- Export a Lottie animation: submit a job with `settings.type: "lottie"` and Bodymovin's settings in `settings.lottie`. See [references/api.md](references/api.md#lottie-export).
 
-Read [references/operations.md](references/operations.md) for payload and diagnosis rules.
+Read [references/operations.md](references/operations.md) for payload and diagnosis rules, and [references/api.md](references/api.md) for base URLs, authentication, endpoints and Lottie jobs.

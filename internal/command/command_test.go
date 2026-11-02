@@ -340,6 +340,36 @@ func TestDryRunRejectsPreviewSettingsWithoutCallingAPI(t *testing.T) {
 	}
 }
 
+func TestJobSubmitSendsLottieSettings(t *testing.T) {
+	var sent map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v2/jobs" {
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&sent); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		io.WriteString(w, `{"id":"job-1","status":"queued","outputUrl":"https://out.example.test/job-1.zip"}`)
+	}))
+	defer server.Close()
+	job := `{"template":{"id":"tpl","composition":"Main"},"settings":{"type":"lottie","lottie":{"should_encode_images":true,"export_modes":{"standalone":false}}}}`
+	state, out, _ := testState(t, server.URL+"/api/v2", strings.NewReader(job))
+	if code := Execute(context.Background(), state, []string{"--json", "job", "submit"}); code != 0 {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	settings, _ := sent["settings"].(map[string]any)
+	if settings["type"] != "lottie" {
+		t.Fatalf("settings.type was not sent: %v", sent)
+	}
+	lottie, _ := settings["lottie"].(map[string]any)
+	modes, _ := lottie["export_modes"].(map[string]any)
+	if lottie["should_encode_images"] != true || modes["standalone"] != false {
+		t.Fatalf("settings.lottie was not sent as given: %v", settings)
+	}
+}
+
 func TestSchemaCommandFindsReferencedSchemas(t *testing.T) {
 	state, out, _ := testState(t, "https://api.nexrender.com/api/v2", strings.NewReader(""))
 	state.Credential = &memoryCredentials{}
