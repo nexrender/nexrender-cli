@@ -68,3 +68,6 @@ release:
   github:
     owner: nexrender
     name: nexrender-cli
+  # Every tag publishes a pre-release for staging. Promote it to a full release on GitHub
+  # once production runs it; install.sh's "latest" only follows full releases.
+  prerelease: true
