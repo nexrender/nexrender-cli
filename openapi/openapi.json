@@ -895,6 +895,47 @@
           }
         }
       },
+      "Team": {
+        "type": "object",
+        "description": "The team that owns the API token used for the request",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique team identifier"
+          },
+          "name": {
+            "type": "string",
+            "description": "Team name as shown in the dashboard"
+          },
+          "trial": {
+            "type": "object",
+            "nullable": true,
+            "description": "Trial allowance, or null when the team is not on a trial",
+            "properties": {
+              "jobsLeft": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Jobs the team can still submit during the trial"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true,
+                "description": "ISO timestamp when the trial ends, or null when it has no end date"
+              }
+            },
+            "required": [
+              "jobsLeft",
+              "expiresAt"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "trial"
+        ]
+      },
       "Secret": {
         "type": "object",
         "description": "Secret object for storing secure environment variables and configuration",
@@ -3013,6 +3054,55 @@
           "Font Management"
         ],
         "operationId": "deleteFont"
+      }
+    },
+    "/team": {
+      "get": {
+        "summary": "Get your team",
+        "description": "Retrieve the team that owns the API token, including its trial allowance when the team is on a trial",
+        "x-mint": {
+          "mcp": {
+            "enabled": true,
+            "name": "get-team",
+            "description": "Get the team that owns your API token: its ID, name, and remaining trial jobs and trial end date when the team is on a trial."
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the team",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Team not found - the team that owns the token is no longer active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Team"
+        ],
+        "operationId": "getTeam"
       }
     },
     "/secrets": {

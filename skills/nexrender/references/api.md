@@ -57,6 +57,7 @@ Paths are relative to the base URL.
 | `GET /jobs` | `listJobs` | `job list` |
 | `POST /jobs/cancel` with `{"jobs": ["<id>", ...]}` | `cancelJobs` | `job cancel-many` |
 | `PATCH /jobs/{id}/cancel` | `cancelJob` | `job cancel` |
+| `GET /team` | `getTeam` | `team show` |
 
 For the exact request and response shapes:
 
