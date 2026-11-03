@@ -131,7 +131,7 @@ nexrender font upload Inter-Bold.ttf
 nexrender secret set MAPBOX_TOKEN
 ```
 
-Every command acts on the Nexrender team connected to the active API key.
+Every command acts on the Nexrender team connected to the active API key. `nexrender team show` tells you which team that is and, during a trial, how many jobs are left and when the trial ends.
 
 ## Let an agent drive
 

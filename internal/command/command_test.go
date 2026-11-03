@@ -414,3 +414,49 @@ func TestSetupShowsWhereToCreateAPIToken(t *testing.T) {
 		t.Fatalf("setup did not show API token URL: %s", stderr.String())
 	}
 }
+
+func TestTeamShowReportsTheTokensTeam(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v2/team" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"01JTEAM","name":"Vanguard","trial":{"jobsLeft":87,"expiresAt":"2026-11-17T10:00:00Z"}}`)
+	}))
+	defer server.Close()
+	state, out, _ := testState(t, server.URL+"/api/v2", strings.NewReader(""))
+	if code := Execute(context.Background(), state, []string{"--json", "team", "show"}); code != 0 {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	var envelope struct {
+		Data    api.Team `json:"data"`
+		Summary string   `json:"summary"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out.String())
+	}
+	if envelope.Data.Id != "01JTEAM" || envelope.Data.Name != "Vanguard" || envelope.Data.Trial == nil || envelope.Data.Trial.JobsLeft != 87 {
+		t.Fatalf("unexpected team: %+v", envelope.Data)
+	}
+	if envelope.Summary != "Team Vanguard" {
+		t.Fatalf("summary = %q", envelope.Summary)
+	}
+}
+
+func TestTeamShowReportsATeamWithoutTrial(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"01JTEAM","name":"Vanguard","trial":null}`)
+	}))
+	defer server.Close()
+	state, out, _ := testState(t, server.URL+"/api/v2", strings.NewReader(""))
+	if code := Execute(context.Background(), state, []string{"team", "show"}); code != 0 {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), `"trial": null`) || !strings.Contains(out.String(), `"name": "Vanguard"`) {
+		t.Fatalf("unexpected output: %s", out.String())
+	}
+}

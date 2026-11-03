@@ -12,6 +12,7 @@ Use the `nexrender` CLI for Nexrender Cloud operations. Prefer its structured ou
 1. Run `nexrender auth status --json`.
 2. If authentication is missing or invalid, ask the user to run `nexrender auth login`. Never request or print their API token.
 3. Use `--profile <name>` when the user identifies a non-default team profile.
+4. Run `nexrender team show --json` when it matters which team the token acts on, or how much of a trial is left.
 
 ## Agent output
 

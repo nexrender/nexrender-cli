@@ -61,6 +61,7 @@ func NewRoot(state *State) *cobra.Command {
 	root.AddCommand(newBatchCommand(state))
 	root.AddCommand(newFontCommand(state))
 	root.AddCommand(newSecretCommand(state))
+	root.AddCommand(newTeamCommand(state))
 	root.AddCommand(newSkillCommand(state))
 	root.AddCommand(newSetupCommand(state))
 	root.AddCommand(newDoctorCommand(state))

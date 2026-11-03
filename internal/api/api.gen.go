@@ -853,6 +853,24 @@ type SecretCreation struct {
 	Value string `json:"value"`
 }
 
+// Team The team that owns the API token used for the request
+type Team struct {
+	// Id Unique team identifier
+	Id string `json:"id"`
+
+	// Name Team name as shown in the dashboard
+	Name string `json:"name"`
+
+	// Trial Trial allowance, or null when the team is not on a trial
+	Trial *struct {
+		// ExpiresAt ISO timestamp when the trial ends, or null when it has no end date
+		ExpiresAt *time.Time `json:"expiresAt"`
+
+		// JobsLeft Jobs the team can still submit during the trial
+		JobsLeft int `json:"jobsLeft"`
+	} `json:"trial"`
+}
+
 // Template Complete template object with metadata, processing status, and content information
 type Template struct {
 	// Compositions List of compositions found within the template that can be rendered
@@ -2175,6 +2193,9 @@ type ClientInterface interface {
 	// DeleteSecret request
 	DeleteSecret(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetTeam request
+	GetTeam(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListTemplates request
 	ListTemplates(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -2467,6 +2488,18 @@ func (c *Client) CreateOrUpdateSecret(ctx context.Context, body CreateOrUpdateSe
 
 func (c *Client) DeleteSecret(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteSecretRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetTeam(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetTeamRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -3365,6 +3398,33 @@ func NewDeleteSecretRequest(server string, id string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetTeamRequest generates requests for GetTeam
+func NewGetTeamRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/team")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListTemplatesRequest generates requests for ListTemplates
 func NewListTemplatesRequest(server string) (*http.Request, error) {
 	var err error
@@ -3924,6 +3984,9 @@ type ClientWithResponsesInterface interface {
 	// DeleteSecretWithResponse request
 	DeleteSecretWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteSecretResponse, error)
 
+	// GetTeamWithResponse request
+	GetTeamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetTeamResponse, error)
+
 	// ListTemplatesWithResponse request
 	ListTemplatesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListTemplatesResponse, error)
 
@@ -4378,6 +4441,30 @@ func (r DeleteSecretResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r DeleteSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetTeamResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Team
+	JSON401      *ErrorResponse
+	JSON404      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetTeamResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetTeamResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4848,6 +4935,15 @@ func (c *ClientWithResponses) DeleteSecretWithResponse(ctx context.Context, id s
 		return nil, err
 	}
 	return ParseDeleteSecretResponse(rsp)
+}
+
+// GetTeamWithResponse request returning *GetTeamResponse
+func (c *ClientWithResponses) GetTeamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetTeamResponse, error) {
+	rsp, err := c.GetTeam(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetTeamResponse(rsp)
 }
 
 // ListTemplatesWithResponse request returning *ListTemplatesResponse
@@ -5724,6 +5820,46 @@ func ParseDeleteSecretResponse(rsp *http.Response) (*DeleteSecretResponse, error
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetTeamResponse parses an HTTP response from a GetTeamWithResponse call
+func ParseGetTeamResponse(rsp *http.Response) (*GetTeamResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetTeamResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Team
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
