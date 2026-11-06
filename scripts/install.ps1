@@ -40,17 +40,39 @@ try {
     New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
     Copy-Item (Join-Path $TemporaryDir "nexrender.exe") (Join-Path $BinDir "nexrender.exe") -Force
 
-    $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $Parts = @($UserPath -split ";" | Where-Object { $_ })
-    if ($Parts -notcontains $BinDir) {
-        $NewPath = (($Parts + $BinDir) -join ";")
-        [Environment]::SetEnvironmentVariable("Path", $NewPath, "User")
-        $env:Path = "$env:Path;$BinDir"
+    # Read the stored value unexpanded: GetEnvironmentVariable would turn entries such as
+    # %USERPROFILE%\bin into fixed paths when the new value is written back.
+    $EnvironmentKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey("Environment")
+    try {
+        $UserPath = [string]$EnvironmentKey.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $Parts = @($UserPath -split ";" | Where-Object { $_ })
+        if ($Parts -notcontains $BinDir) {
+            $EnvironmentKey.SetValue("Path", (($Parts + $BinDir) -join ";"), [Microsoft.Win32.RegistryValueKind]::ExpandString)
+            # Changing a user variable this way tells Explorer and new terminals that the environment changed.
+            [Environment]::SetEnvironmentVariable("NEXRENDER_INSTALL", "1", "User")
+            [Environment]::SetEnvironmentVariable("NEXRENDER_INSTALL", $null, "User")
+            $env:Path = "$env:Path;$BinDir"
+        }
+    } finally {
+        $EnvironmentKey.Close()
     }
 
     Write-Host "Installed nexrender to $BinDir\nexrender.exe"
-    if ($env:NEXRENDER_SKIP_SETUP -ne "1" -and [Environment]::UserInteractive) {
-        & (Join-Path $BinDir "nexrender.exe") setup
+    $Nexrender = Join-Path $BinDir "nexrender.exe"
+    if ($env:NEXRENDER_SKIP_SETUP -ne "1") {
+        if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+            & $Nexrender setup
+            if ($LASTEXITCODE -ne 0) { Write-Warning "Setup did not finish. Run nexrender setup to try again." }
+        } else {
+            # Without a terminal, only refresh skills that the CLI installed earlier.
+            # Releases before skill update existed lack the command, so check for it first.
+            $Commands = @()
+            try { $Commands = & $Nexrender commands --quiet --jq '.[].command' 2>$null } catch {}
+            if ($Commands -contains "nexrender skill update") {
+                & $Nexrender skill update
+                if ($LASTEXITCODE -ne 0) { Write-Warning "Could not refresh agent skills. Run nexrender skill update to try again." }
+            }
+        }
     }
 } finally {
     Remove-Item -Recurse -Force $TemporaryDir -ErrorAction SilentlyContinue

@@ -96,6 +96,14 @@ case ":${PATH}:" in
   *) echo "Add ${binary_dir} to PATH before running nexrender." ;;
 esac
 
-if [ "${NEXRENDER_SKIP_SETUP:-0}" != "1" ] && [ -t 0 ] && [ -t 1 ]; then
-  "${binary_dir}/nexrender" setup
+nexrender="${binary_dir}/nexrender"
+if [ "${NEXRENDER_SKIP_SETUP:-0}" != "1" ]; then
+  # curl | sh gives this script the download as stdin, so setup reads from the terminal instead.
+  if [ -t 1 ] && (: </dev/tty) 2>/dev/null; then
+    "$nexrender" setup </dev/tty || echo "Setup did not finish. Run nexrender setup to try again." >&2
+  # Without a terminal, only refresh skills that the CLI installed earlier.
+  # Releases before skill update existed lack the command, so check for it first.
+  elif "$nexrender" commands --quiet --jq '.[].command' 2>/dev/null | grep -qx 'nexrender skill update'; then
+    "$nexrender" skill update || echo "Could not refresh agent skills. Run nexrender skill update to try again." >&2
+  fi
 fi
