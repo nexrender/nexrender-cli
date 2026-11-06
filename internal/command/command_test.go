@@ -460,3 +460,81 @@ func TestTeamShowReportsATeamWithoutTrial(t *testing.T) {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
 }
+
+func TestSkillUpdateRefreshesOnlyCLIInstalledSkills(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	agentsPath := filepath.Join(home, ".agents", "skills", "nexrender")
+	state, out, _ := testState(t, "https://api.nexrender.com/api/v2", strings.NewReader(""))
+	if code := Execute(context.Background(), state, []string{"--json", "skill", "install", "--agent", "agents"}); code != 0 {
+		t.Fatalf("install exit = %d: %s", code, out.String())
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".claude", "skills", "nexrender"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := Execute(context.Background(), state, []string{"--json", "skill", "update"}); code != 0 {
+		t.Fatalf("update exit = %d: %s", code, out.String())
+	}
+	var envelope struct {
+		Data []SkillInstallResult `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatalf("%v: %s", err, out.String())
+	}
+	if len(envelope.Data) != 1 || envelope.Data[0].Agent != "agents" || envelope.Data[0].Path != agentsPath {
+		t.Fatalf("updated = %+v", envelope.Data)
+	}
+}
+
+func TestSetupAsksForANewTokenWhenTheSavedOneIsRejected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer new-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			io.WriteString(w, `{"error":"invalid token"}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `[]`)
+	}))
+	defer server.Close()
+	state, out, stderr := testState(t, server.URL+"/api/v2", strings.NewReader("new-token\n"))
+	credentials := &memoryCredentials{token: "old-token"}
+	state.Credential = credentials
+
+	if code := Execute(context.Background(), state, []string{"setup", "--skip-agents", "--token-stdin"}); code != 0 {
+		t.Fatalf("exit = %d, output = %s %s", code, out.String(), stderr.String())
+	}
+	if credentials.token != "new-token" {
+		t.Fatalf("stored token = %q", credentials.token)
+	}
+	if !strings.Contains(stderr.String(), "saved API token was rejected") {
+		t.Fatalf("setup did not explain the prompt: %s", stderr.String())
+	}
+}
+
+func TestSetupDoesNotReplaceARejectedEnvironmentToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	state, out, _ := testState(t, server.URL+"/api/v2", strings.NewReader("new-token\n"))
+	state.Credential = &environmentCredentials{token: "env-token"}
+
+	if code := Execute(context.Background(), state, []string{"--json", "setup", "--skip-agents", "--token-stdin"}); code == 0 {
+		t.Fatalf("expected a rejected NEXRENDER_API_KEY to fail: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "authentication_failed") {
+		t.Fatalf("unexpected output: %s", out.String())
+	}
+}
+
+type environmentCredentials struct {
+	memoryCredentials
+	token string
+}
+
+func (e *environmentCredentials) Get(string) (auth.Credential, error) {
+	return auth.Credential{Token: e.token, Source: "environment"}, nil
+}

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/nexrender/nexrender-cli/internal/buildinfo"
 	"github.com/nexrender/nexrender-cli/internal/clierr"
@@ -52,7 +54,7 @@ func newSkillCommand(state *State) *cobra.Command {
 				}
 				results = append(results, SkillInstallResult{Agent: agent.Name, Path: agent.Path})
 			}
-			return state.Printer(state.Out).Success(results, fmt.Sprintf("Installed the Nexrender skill for %d agents", len(results)), func(w io.Writer) error {
+			return state.Printer(state.Out).Success(results, "Installed the Nexrender skill for "+agentCount(len(results)), func(w io.Writer) error {
 				for _, result := range results {
 					fmt.Fprintf(w, "Installed for %s at %s\n", result.Agent, result.Path)
 				}
@@ -63,12 +65,54 @@ func newSkillCommand(state *State) *cobra.Command {
 	install.Flags().StringSliceVar(&agents, "agent", nil, "agent to configure: codex, claude, agents, or all")
 	install.Flags().BoolVar(&replace, "replace", false, "replace an unmanaged skill directory")
 	cmd.AddCommand(install)
+	cmd.AddCommand(&cobra.Command{
+		Use: "update", Short: "Refresh skills that the CLI installed earlier", Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			results := []SkillInstallResult{}
+			for _, agent := range skills.Managed(home) {
+				if err := skills.Install(agent, buildinfo.Version, false); err != nil {
+					return &clierr.Error{Code: "skill_install_failed", Message: err.Error(), ExitCode: clierr.ExitConflict}
+				}
+				results = append(results, SkillInstallResult{Agent: agent.Name, Path: agent.Path})
+			}
+			summary := "Updated the Nexrender skill for " + agentCount(len(results))
+			if len(results) == 0 {
+				summary = "No CLI-installed skills to update"
+			}
+			return state.Printer(state.Out).Success(results, summary, func(w io.Writer) error {
+				for _, result := range results {
+					fmt.Fprintf(w, "Updated for %s at %s\n", result.Agent, result.Path)
+				}
+				return nil
+			})
+		},
+	})
 	return cmd
 }
 
+// selectedAgents resolves --agent names. Without names it returns the detected agents
+// plus every agent whose skill the CLI installed earlier, so those copies stay current.
 func selectedAgents(home string, names []string) ([]skills.Agent, error) {
-	if len(names) == 0 {
-		return skills.Detect(home), nil
+	if len(names) > 0 {
+		return skills.ResolveAgents(home, names)
 	}
-	return skills.ResolveAgents(home, names)
+	selected := skills.Detect(home)
+	for _, managed := range skills.Managed(home) {
+		if !slices.ContainsFunc(selected, func(agent skills.Agent) bool { return agent.Name == managed.Name }) {
+			selected = append(selected, managed)
+		}
+	}
+	slices.SortFunc(selected, func(a, b skills.Agent) int { return strings.Compare(a.Name, b.Name) })
+	return selected, nil
+}
+
+func agentCount(n int) string {
+	if n == 1 {
+		return "1 agent"
+	}
+	return fmt.Sprintf("%d agents", n)
 }

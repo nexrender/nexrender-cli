@@ -38,7 +38,7 @@ go install github.com/nexrender/nexrender-cli/cmd/nexrender@latest
 
 ## Update
 
-Run the installer for your platform again. It replaces the current binary with the latest release, keeps your profiles and credentials, and refreshes CLI-managed agent skills.
+Run the installer for your platform again. It replaces the current binary with the latest release and keeps your profiles and credentials. In a terminal it then runs `nexrender setup`, which also refreshes the agent skills. Without a terminal, for example in CI, it runs `nexrender skill update`, which refreshes only the skills the CLI installed earlier.
 
 For a binary-only update on macOS, Linux, or WSL:
 
@@ -60,7 +60,7 @@ Run:
 nexrender setup
 ```
 
-Setup checks your Nexrender API key, saves it in your system keyring when possible, and teaches detected coding agents how to use the CLI. Run it again whenever you want to reconnect an account or install the agent skill somewhere new.
+Setup asks for your Nexrender API key if none is saved yet, checks it, and saves it in your system keyring when possible. If the saved key no longer works, setup asks for a new one. It then installs the agent skill for the coding agents it finds. Run it again to install the skill for a new agent. To switch to a different API key, run `nexrender auth login`.
 
 For CI and sandboxed agents that cannot access your system keyring, expose the API token as `NEXRENDER_API_KEY`:
 
@@ -135,12 +135,15 @@ Every command acts on the Nexrender team connected to the active API key. `nexre
 
 ## Let an agent drive
 
-The CLI ships with a Nexrender skill for coding agents. `nexrender setup` installs it automatically for detected agents, or you can choose one yourself:
+The CLI ships with a Nexrender skill for coding agents. `nexrender setup` installs it for Claude Code and Codex when it finds them, or you can choose an agent yourself:
 
 ```bash
 nexrender skill install --agent codex
 nexrender skill install --agent claude
+nexrender skill install --agent agents   # ~/.agents/skills, for other agents
 ```
+
+The installed copy does not change when the CLI updates. `nexrender setup` and `nexrender skill install` refresh every copy the CLI installed earlier, and `nexrender skill update` refreshes those copies without installing anywhere new.
 
 Then ask for the outcome you want:
 

@@ -69,11 +69,29 @@ func ResolveAgents(home string, names []string) ([]Agent, error) {
 	return result, nil
 }
 
+// Managed returns the known agents whose skill folder was installed by the CLI.
+func Managed(home string) []Agent {
+	var managed []Agent
+	for _, agent := range KnownAgents(home) {
+		if IsManaged(agent.Path) {
+			managed = append(managed, agent)
+		}
+	}
+	return managed
+}
+
+func IsManaged(path string) bool {
+	_, err := os.Stat(filepath.Join(path, managedMarker))
+	return err == nil
+}
+
 func Install(agent Agent, version string, replace bool) error {
 	if info, err := os.Stat(agent.Path); err == nil && info.IsDir() {
-		marker := filepath.Join(agent.Path, managedMarker)
-		if _, markerErr := os.Stat(marker); markerErr != nil && !replace {
+		if !IsManaged(agent.Path) && !replace {
 			return fmt.Errorf("refusing to overwrite unmanaged skill at %s", agent.Path)
+		}
+		if err := clearDir(agent.Path); err != nil {
+			return fmt.Errorf("remove previous skill: %w", err)
 		}
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("inspect skill destination: %w", err)
@@ -105,6 +123,21 @@ func Install(agent Agent, version string, replace bool) error {
 	marker := fmt.Sprintf("managed-by=nexrender-cli\nversion=%s\n", version)
 	if err := os.WriteFile(filepath.Join(agent.Path, managedMarker), []byte(marker), 0o644); err != nil {
 		return fmt.Errorf("write skill marker: %w", err)
+	}
+	return nil
+}
+
+// clearDir empties a folder but keeps the folder itself, which may be a symlink,
+// so files dropped from a newer skill do not linger.
+func clearDir(path string) error {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(path, entry.Name())); err != nil {
+			return err
+		}
 	}
 	return nil
 }

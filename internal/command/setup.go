@@ -1,6 +1,7 @@
 package command
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -34,6 +35,17 @@ func newSetupCommand(state *State) *cobra.Command {
 			result := SetupResult{Profile: resolved.Profile, Server: resolved.Server, Skills: []SkillInstallResult{}}
 			if !skipAuth {
 				token := resolved.Token
+				if token != "" {
+					err := verifyToken(cmd.Context(), resolved.Server, token, state.Timeout)
+					switch {
+					case err == nil:
+					case isAuthFailure(err) && resolved.CredentialSource != "environment":
+						fmt.Fprintln(state.Err, "The saved API token was rejected. Enter a new one.")
+						token = ""
+					default:
+						return err
+					}
+				}
 				if token == "" {
 					if !tokenStdin {
 						fmt.Fprintf(state.Err, "Create an API token at %s\n\n", apiTokenSettingsURL)
@@ -50,8 +62,6 @@ func newSetupCommand(state *State) *cobra.Command {
 						return err
 					}
 					resolved.CredentialSource = source
-				} else if err := verifyToken(cmd.Context(), resolved.Server, token, state.Timeout); err != nil {
-					return err
 				}
 				result.Authenticated = true
 				result.CredentialSource = resolved.CredentialSource
@@ -87,4 +97,9 @@ func newSetupCommand(state *State) *cobra.Command {
 	cmd.Flags().StringSliceVar(&agents, "agent", nil, "agent to configure: codex, claude, agents, or all")
 	cmd.Flags().BoolVar(&replace, "replace-skill", false, "replace an unmanaged skill directory")
 	return cmd
+}
+
+func isAuthFailure(err error) bool {
+	var cliErr *clierr.Error
+	return errors.As(err, &cliErr) && cliErr.Code == "authentication_failed"
 }
