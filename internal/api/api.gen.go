@@ -471,7 +471,7 @@ type JobAsset_Params struct {
 	AdditionalProperties map[string]interface{}     `json:"-"`
 }
 
-// JobAssetNested A nested job asset that renders a child job first, then uses its output as a video/image asset in the parent composition. The child job's output URL is automatically injected into the parent's assets. A child can have nested job assets of its own: a job tree is at most 4 levels deep and has at most 50 jobs, nx:genai functions included (JOB_TREE_TOO_LARGE otherwise).
+// JobAssetNested A nested job asset that renders a child job first, then uses its output as a video/image asset in the parent composition. The child job's output URL is automatically injected into the parent's assets. A child can have nested job assets of its own, up to 4 levels of child jobs below the submitted job (NESTED_JOB_ASSETS otherwise). A job tree has at most 50 jobs, counting the submitted job and every nx:genai function (JOB_TREE_TOO_LARGE otherwise).
 type JobAssetNested struct {
 	// Assets Assets to inject into the child job, nested job assets included
 	Assets *[]JobAssetNested_Assets_Item `json:"assets,omitempty"`
