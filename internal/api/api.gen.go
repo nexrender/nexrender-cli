@@ -99,10 +99,16 @@ const (
 	JobCreationUploadProviderS3 JobCreationUploadProvider = "s3"
 )
 
+// Defines values for JobCreationChildStatus.
+const (
+	JobCreationChildStatusPending JobCreationChildStatus = "pending"
+	JobCreationChildStatusQueued  JobCreationChildStatus = "queued"
+)
+
 // Defines values for JobCreationResponseStatus.
 const (
-	Pending JobCreationResponseStatus = "pending"
-	Queued  JobCreationResponseStatus = "queued"
+	JobCreationResponseStatusPending JobCreationResponseStatus = "pending"
+	JobCreationResponseStatusQueued  JobCreationResponseStatus = "queued"
 )
 
 // Defines values for JobWebhookMethod.
@@ -465,10 +471,10 @@ type JobAsset_Params struct {
 	AdditionalProperties map[string]interface{}     `json:"-"`
 }
 
-// JobAssetNested A nested job asset that renders a child job first, then uses its output as a video/image asset in the parent composition. The child job's output URL is automatically injected into the parent's assets.
+// JobAssetNested A nested job asset that renders a child job first, then uses its output as a video/image asset in the parent composition. The child job's output URL is automatically injected into the parent's assets. A child can have nested job assets of its own: a job tree is at most 4 levels deep and has at most 50 jobs, nx:genai functions included (JOB_TREE_TOO_LARGE otherwise).
 type JobAssetNested struct {
-	// Assets Assets to inject into the child job
-	Assets *[]JobAsset `json:"assets,omitempty"`
+	// Assets Assets to inject into the child job, nested job assets included
+	Assets *[]JobAssetNested_Assets_Item `json:"assets,omitempty"`
 
 	// LayerName Target layer name in the parent composition where the child job's output will be placed (required)
 	LayerName string `json:"layerName"`
@@ -511,6 +517,11 @@ type JobAssetNested struct {
 
 	// Type Must be 'job' to indicate this is a nested job asset
 	Type JobAssetNestedType `json:"type"`
+}
+
+// JobAssetNested_Assets_Item defines model for JobAssetNested.assets.Item.
+type JobAssetNested_Assets_Item struct {
+	union json.RawMessage
 }
 
 // JobAssetNestedSettingsEngine After Effects render engine version for the child job
@@ -649,22 +660,34 @@ type JobCreationSettingsType string
 // JobCreationUploadProvider Storage provider - 's3' for Amazon S3 compatible
 type JobCreationUploadProvider string
 
+// JobCreationChild A child job the creation made for a nested job asset or an nx:genai function, with its own children nested
+type JobCreationChild struct {
+	// Children This child's own child jobs (only present when it has any)
+	Children *[]JobCreationChild `json:"children,omitempty"`
+
+	// Function The function the child job runs, such as 'nx:genai'. Absent for nested job assets.
+	Function *string `json:"function,omitempty"`
+
+	// Id Child job identifier
+	Id string `json:"id"`
+
+	// MissingFonts List of fonts referenced in child's template but not found in team's font library (only present if fonts are missing)
+	MissingFonts *[]string `json:"missingFonts,omitempty"`
+
+	// OutputUrl URL where the child job's rendered output will be available. Absent for nx:genai children: the generated file's extension is known only when generation finishes.
+	OutputUrl *string `json:"outputUrl,omitempty"`
+
+	// Status 'queued', or 'pending' for a child waiting on child jobs of its own
+	Status JobCreationChildStatus `json:"status"`
+}
+
+// JobCreationChildStatus 'queued', or 'pending' for a child waiting on child jobs of its own
+type JobCreationChildStatus string
+
 // JobCreationResponse Response after creating a job, includes children info for parent jobs
 type JobCreationResponse struct {
-	// Children Child job details (only present for parent jobs with nested job assets)
-	Children *[]struct {
-		// Id Child job identifier
-		Id string `json:"id"`
-
-		// MissingFonts List of fonts referenced in child's template but not found in team's font library (only present if fonts are missing)
-		MissingFonts *[]string `json:"missingFonts,omitempty"`
-
-		// OutputUrl URL where the child job's rendered output will be available
-		OutputUrl string `json:"outputUrl"`
-
-		// Status Child job status (typically 'queued')
-		Status *string `json:"status,omitempty"`
-	} `json:"children,omitempty"`
+	// Children Child jobs (only present for jobs with nested job assets or nx:genai functions)
+	Children *[]JobCreationChild `json:"children,omitempty"`
 
 	// Id Unique job identifier
 	Id string `json:"id"`
@@ -675,11 +698,11 @@ type JobCreationResponse struct {
 	// OutputUrl URL where the rendered output will be available
 	OutputUrl string `json:"outputUrl"`
 
-	// Status 'queued' for regular jobs, 'pending' for parent jobs waiting on children
+	// Status 'queued' for regular jobs, 'pending' for jobs waiting on child jobs (nested job assets or nx:genai functions)
 	Status JobCreationResponseStatus `json:"status"`
 }
 
-// JobCreationResponseStatus 'queued' for regular jobs, 'pending' for parent jobs waiting on children
+// JobCreationResponseStatus 'queued' for regular jobs, 'pending' for jobs waiting on child jobs (nested job assets or nx:genai functions)
 type JobCreationResponseStatus string
 
 // JobTemplate Template configuration defining the After Effects project and composition to render. Provide exactly one of `id` (an uploaded template) or `src` (a template URL); sending both, or neither, is rejected.
@@ -1691,6 +1714,95 @@ func (t JobAsset_Params_LayerName) MarshalJSON() ([]byte, error) {
 }
 
 func (t *JobAsset_Params_LayerName) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsJobAsset returns the union data inside the JobAssetNested_Assets_Item as a JobAsset
+func (t JobAssetNested_Assets_Item) AsJobAsset() (JobAsset, error) {
+	var body JobAsset
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromJobAsset overwrites any union data inside the JobAssetNested_Assets_Item as the provided JobAsset
+func (t *JobAssetNested_Assets_Item) FromJobAsset(v JobAsset) error {
+	v.Type = "JobAsset"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeJobAsset performs a merge with any union data inside the JobAssetNested_Assets_Item, using the provided JobAsset
+func (t *JobAssetNested_Assets_Item) MergeJobAsset(v JobAsset) error {
+	v.Type = "JobAsset"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsJobAssetNested returns the union data inside the JobAssetNested_Assets_Item as a JobAssetNested
+func (t JobAssetNested_Assets_Item) AsJobAssetNested() (JobAssetNested, error) {
+	var body JobAssetNested
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromJobAssetNested overwrites any union data inside the JobAssetNested_Assets_Item as the provided JobAssetNested
+func (t *JobAssetNested_Assets_Item) FromJobAssetNested(v JobAssetNested) error {
+	v.Type = "job"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeJobAssetNested performs a merge with any union data inside the JobAssetNested_Assets_Item, using the provided JobAssetNested
+func (t *JobAssetNested_Assets_Item) MergeJobAssetNested(v JobAssetNested) error {
+	v.Type = "job"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t JobAssetNested_Assets_Item) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"type"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t JobAssetNested_Assets_Item) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "JobAsset":
+		return t.AsJobAsset()
+	case "job":
+		return t.AsJobAssetNested()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t JobAssetNested_Assets_Item) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *JobAssetNested_Assets_Item) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

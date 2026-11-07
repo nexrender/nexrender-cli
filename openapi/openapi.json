@@ -104,7 +104,7 @@
       },
       "JobAssetNested": {
         "type": "object",
-        "description": "A nested job asset that renders a child job first, then uses its output as a video/image asset in the parent composition. The child job's output URL is automatically injected into the parent's assets.",
+        "description": "A nested job asset that renders a child job first, then uses its output as a video/image asset in the parent composition. The child job's output URL is automatically injected into the parent's assets. A child can have nested job assets of its own: a job tree is at most 4 levels deep and has at most 50 jobs, nx:genai functions included (JOB_TREE_TOO_LARGE otherwise).",
         "properties": {
           "type": {
             "type": "string",
@@ -138,9 +138,10 @@
           "assets": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/JobAsset"
+              "oneOf": [{ "$ref": "#/components/schemas/JobAsset" }, { "$ref": "#/components/schemas/JobAssetNested" }],
+              "discriminator": { "propertyName": "type", "mapping": { "job": "#/components/schemas/JobAssetNested" } }
             },
-            "description": "Assets to inject into the child job"
+            "description": "Assets to inject into the child job, nested job assets included"
           },
           "preview": {
             "type": "boolean",
@@ -340,6 +341,40 @@
         },
         "required": ["assets"]
       },
+      "JobCreationChild": {
+        "type": "object",
+        "description": "A child job the creation made for a nested job asset or an nx:genai function, with its own children nested",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Child job identifier"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "pending"],
+            "description": "'queued', or 'pending' for a child waiting on child jobs of its own"
+          },
+          "function": {
+            "type": "string",
+            "description": "The function the child job runs, such as 'nx:genai'. Absent for nested job assets."
+          },
+          "outputUrl": {
+            "type": "string",
+            "description": "URL where the child job's rendered output will be available. Absent for nx:genai children: the generated file's extension is known only when generation finishes."
+          },
+          "missingFonts": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of fonts referenced in child's template but not found in team's font library (only present if fonts are missing)"
+          },
+          "children": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/JobCreationChild" },
+            "description": "This child's own child jobs (only present when it has any)"
+          }
+        },
+        "required": ["id", "status"]
+      },
       "JobCreationResponse": {
         "type": "object",
         "description": "Response after creating a job, includes children info for parent jobs",
@@ -351,7 +386,7 @@
           "status": {
             "type": "string",
             "enum": ["queued", "pending"],
-            "description": "'queued' for regular jobs, 'pending' for parent jobs waiting on children"
+            "description": "'queued' for regular jobs, 'pending' for jobs waiting on child jobs (nested job assets or nx:genai functions)"
           },
           "outputUrl": {
             "type": "string",
@@ -359,29 +394,9 @@
           },
           "children": {
             "type": "array",
-            "description": "Child job details (only present for parent jobs with nested job assets)",
+            "description": "Child jobs (only present for jobs with nested job assets or nx:genai functions)",
             "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "description": "Child job identifier"
-                },
-                "status": {
-                  "type": "string",
-                  "description": "Child job status (typically 'queued')"
-                },
-                "outputUrl": {
-                  "type": "string",
-                  "description": "URL where the child job's rendered output will be available"
-                },
-                "missingFonts": {
-                  "type": "array",
-                  "items": { "type": "string" },
-                  "description": "List of fonts referenced in child's template but not found in team's font library (only present if fonts are missing)"
-                }
-              },
-              "required": ["id", "outputUrl"]
+              "$ref": "#/components/schemas/JobCreationChild"
             }
           },
           "missingFonts": {
