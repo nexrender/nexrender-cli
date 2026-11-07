@@ -548,9 +548,8 @@
               },
               "engine": {
                 "type": "string",
-                "enum": ["ae2025", "ae2026"],
-                "default": "ae2026",
-                "description": "After Effects render engine version used when the job is picked up by a worker"
+                "enum": ["ae2025", "ae2026", "lottie"],
+                "description": "Render engine: an After Effects version (ae2026 when omitted), or lottie to render a Lottie template (.json, .zip or .lottie) on action workers. lottie needs Lottie rendering turned on for the team, takes data, text and image assets and video or image settings, and is required for a Lottie template.src."
               },
               "multiFrame": {
                 "type": "boolean",
@@ -737,12 +736,8 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": [
-              "aep",
-              "zip",
-              "mogrt"
-            ],
-            "description": "Template project file type - aep (After Effects Project), zip (compressed project), or mogrt (Motion Graphics Template)"
+            "enum": ["aep", "zip", "mogrt", "json", "lottie"],
+            "description": "Template project file type - aep (After Effects Project), zip (compressed project: an After Effects project, or a Lottie animation with its images), mogrt (Motion Graphics Template), json (Lottie animation) or lottie (dotLottie). json, lottie and Lottie .zip files need Lottie rendering turned on for the team."
           },
           "displayName": {
             "type": "string",
@@ -816,6 +811,11 @@
           "id": {
             "type": "string",
             "description": "Unique template identifier used for referencing in jobs and API operations"
+          },
+          "engine": {
+            "type": "string",
+            "enum": ["aftereffects", "lottie"],
+            "description": "What renders the template: After Effects, or Lottie (a Lottie .json, .zip or .lottie, parsed and rendered on action workers). Jobs from a Lottie template render with settings.engine \"lottie\"."
           },
           "type": {
             "type": "string",
@@ -1264,13 +1264,14 @@
             "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
             "description": "Unique template identifier used for referencing in jobs and API operations"
           },
+          "engine": {
+            "type": "string",
+            "enum": ["aftereffects", "lottie"],
+            "description": "What renders the template: After Effects, or Lottie (a Lottie .json, .zip or .lottie, parsed and rendered on action workers). Jobs from a Lottie template render with settings.engine \"lottie\"."
+          },
           "type": {
             "type": "string",
-            "enum": [
-              "aep",
-              "zip",
-              "mogrt"
-            ],
+            "enum": ["aep", "zip", "mogrt", "json", "lottie"],
             "description": "Template file format"
           },
           "displayName": {

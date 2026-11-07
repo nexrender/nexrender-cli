@@ -225,15 +225,16 @@ func newTemplateUploadCommand(state *State) *cobra.Command {
 				return clierr.Wrap("input_error", "could not read template file", clierr.ExitUsage, err)
 			}
 			if !info.Mode().IsRegular() {
-				return clierr.Validation("template path is not a regular file", "Pass an .aep, .zip, or .mogrt file.")
+				return clierr.Validation("template path is not a regular file", "Pass an .aep, .zip, .mogrt, .json, or .lottie file.")
 			}
 			if templateType == "" {
 				templateType = strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
 			}
 			switch templateType {
-			case "aep", "zip", "mogrt":
+			// json and lottie: Lottie templates, for teams with Lottie rendering
+			case "aep", "zip", "mogrt", "json", "lottie":
 			default:
-				return clierr.Validation("unsupported template type "+templateType, "Use --type aep, --type zip, or --type mogrt.")
+				return clierr.Validation("unsupported template type "+templateType, "Use --type aep, zip, mogrt, json, or lottie.")
 			}
 			if name == "" {
 				name = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
@@ -273,7 +274,7 @@ func newTemplateUploadCommand(state *State) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "template display name")
-	cmd.Flags().StringVar(&templateType, "type", "", "template type: aep, zip, or mogrt")
+	cmd.Flags().StringVar(&templateType, "type", "", "template type: aep, zip, mogrt, json, or lottie (default: from the file extension)")
 	cmd.Flags().BoolVar(&noWait, "no-wait", false, "return after the binary upload")
 	cmd.Flags().DurationVar(&interval, "interval", 2*time.Second, "processing poll interval")
 	cmd.Flags().DurationVar(&waitTimeout, "wait-timeout", 15*time.Minute, "maximum processing wait")

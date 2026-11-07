@@ -78,6 +78,7 @@ const (
 const (
 	JobCreationSettingsEngineAe2025 JobCreationSettingsEngine = "ae2025"
 	JobCreationSettingsEngineAe2026 JobCreationSettingsEngine = "ae2026"
+	JobCreationSettingsEngineLottie JobCreationSettingsEngine = "lottie"
 )
 
 // Defines values for JobCreationSettingsQuality.
@@ -151,17 +152,31 @@ const (
 	Video JoinVideoAssetType = "video"
 )
 
+// Defines values for TemplateEngine.
+const (
+	TemplateEngineAftereffects TemplateEngine = "aftereffects"
+	TemplateEngineLottie       TemplateEngine = "lottie"
+)
+
 // Defines values for TemplateCreationType.
 const (
-	TemplateCreationTypeAep   TemplateCreationType = "aep"
-	TemplateCreationTypeMogrt TemplateCreationType = "mogrt"
-	TemplateCreationTypeZip   TemplateCreationType = "zip"
+	TemplateCreationTypeAep    TemplateCreationType = "aep"
+	TemplateCreationTypeJson   TemplateCreationType = "json"
+	TemplateCreationTypeLottie TemplateCreationType = "lottie"
+	TemplateCreationTypeMogrt  TemplateCreationType = "mogrt"
+	TemplateCreationTypeZip    TemplateCreationType = "zip"
 )
 
 // Defines values for TemplateUploadInfoMethod.
 const (
 	TemplateUploadInfoMethodPOST TemplateUploadInfoMethod = "POST"
 	TemplateUploadInfoMethodPUT  TemplateUploadInfoMethod = "PUT"
+)
+
+// Defines values for TemplateV3Engine.
+const (
+	TemplateV3EngineAftereffects TemplateV3Engine = "aftereffects"
+	TemplateV3EngineLottie       TemplateV3Engine = "lottie"
 )
 
 // Defines values for TemplateV3Status.
@@ -175,9 +190,11 @@ const (
 
 // Defines values for TemplateV3Type.
 const (
-	TemplateV3TypeAep   TemplateV3Type = "aep"
-	TemplateV3TypeMogrt TemplateV3Type = "mogrt"
-	TemplateV3TypeZip   TemplateV3Type = "zip"
+	TemplateV3TypeAep    TemplateV3Type = "aep"
+	TemplateV3TypeJson   TemplateV3Type = "json"
+	TemplateV3TypeLottie TemplateV3Type = "lottie"
+	TemplateV3TypeMogrt  TemplateV3Type = "mogrt"
+	TemplateV3TypeZip    TemplateV3Type = "zip"
 )
 
 // Defines values for ListJobsParamsMinimal.
@@ -572,7 +589,7 @@ type JobCreation struct {
 		// Codec Output codec specification (e.g., 'h264_vbr_15mbps', 'prores_422', 'png', 'jpeg')
 		Codec *string `json:"codec,omitempty"`
 
-		// Engine After Effects render engine version used when the job is picked up by a worker
+		// Engine Render engine: an After Effects version (ae2026 when omitted), or lottie to render a Lottie template (.json, .zip or .lottie) on action workers. lottie needs Lottie rendering turned on for the team, takes data, text and image assets and video or image settings, and is required for a Lottie template.src.
 		Engine *JobCreationSettingsEngine `json:"engine,omitempty"`
 
 		// Frames Frame specification - single frame number, [start, end] range or [start, end, skip]. Required for image type unless an nx:preview image function names the frame.
@@ -637,7 +654,7 @@ type JobCreation_Assets_Item struct {
 	union json.RawMessage
 }
 
-// JobCreationSettingsEngine After Effects render engine version used when the job is picked up by a worker
+// JobCreationSettingsEngine Render engine: an After Effects version (ae2026 when omitted), or lottie to render a Lottie template (.json, .zip or .lottie) on action workers. lottie needs Lottie rendering turned on for the team, takes data, text and image assets and video or image settings, and is required for a Lottie template.src.
 type JobCreationSettingsEngine string
 
 // JobCreationSettingsFrames0 Single frame number to render as image
@@ -905,6 +922,9 @@ type Template struct {
 	// DisplayName Human-readable name displayed in UI and template listings
 	DisplayName *string `json:"displayName,omitempty"`
 
+	// Engine What renders the template: After Effects, or Lottie (a Lottie .json, .zip or .lottie, parsed and rendered on action workers). Jobs from a Lottie template render with settings.engine "lottie".
+	Engine *TemplateEngine `json:"engine,omitempty"`
+
 	// Error Error message if template processing or validation failed (null if successful)
 	Error *string `json:"error"`
 
@@ -929,6 +949,9 @@ type Template struct {
 	// UploadInfo Presigned upload URL and metadata for securely uploading template files to cloud storage
 	UploadInfo *TemplateUploadInfo `json:"uploadInfo,omitempty"`
 }
+
+// TemplateEngine What renders the template: After Effects, or Lottie (a Lottie .json, .zip or .lottie, parsed and rendered on action workers). Jobs from a Lottie template render with settings.engine "lottie".
+type TemplateEngine string
 
 // TemplateComposition After Effects composition discovered during template processing
 type TemplateComposition struct {
@@ -962,11 +985,11 @@ type TemplateCreation struct {
 	// Src Link to the project file nexrender should create the template from. If not set, presigned upload URL is returned in the response object instead.
 	Src *string `json:"src,omitempty"`
 
-	// Type Template project file type - aep (After Effects Project), zip (compressed project), or mogrt (Motion Graphics Template)
+	// Type Template project file type - aep (After Effects Project), zip (compressed project: an After Effects project, or a Lottie animation with its images), mogrt (Motion Graphics Template), json (Lottie animation) or lottie (dotLottie). json, lottie and Lottie .zip files need Lottie rendering turned on for the team.
 	Type TemplateCreationType `json:"type"`
 }
 
-// TemplateCreationType Template project file type - aep (After Effects Project), zip (compressed project), or mogrt (Motion Graphics Template)
+// TemplateCreationType Template project file type - aep (After Effects Project), zip (compressed project: an After Effects project, or a Lottie animation with its images), mogrt (Motion Graphics Template), json (Lottie animation) or lottie (dotLottie). json, lottie and Lottie .zip files need Lottie rendering turned on for the team.
 type TemplateCreationType string
 
 // TemplateLayer After Effects layer discovered during template processing
@@ -1052,6 +1075,9 @@ type TemplateV3 struct {
 	// DisplayName Human-readable template name
 	DisplayName string `json:"displayName"`
 
+	// Engine What renders the template: After Effects, or Lottie (a Lottie .json, .zip or .lottie, parsed and rendered on action workers). Jobs from a Lottie template render with settings.engine "lottie".
+	Engine *TemplateV3Engine `json:"engine,omitempty"`
+
 	// Id Unique template identifier used for referencing in jobs and API operations
 	Id string `json:"id"`
 
@@ -1064,6 +1090,9 @@ type TemplateV3 struct {
 	// UpdatedAt ISO timestamp when the template was last updated
 	UpdatedAt time.Time `json:"updatedAt"`
 }
+
+// TemplateV3Engine What renders the template: After Effects, or Lottie (a Lottie .json, .zip or .lottie, parsed and rendered on action workers). Jobs from a Lottie template render with settings.engine "lottie".
+type TemplateV3Engine string
 
 // TemplateV3Status Current template processing status
 type TemplateV3Status string

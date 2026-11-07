@@ -181,6 +181,51 @@ func TestTemplateUploadDoesNotForwardBearer(t *testing.T) {
 	}
 }
 
+func TestTemplateUploadTakesLottieFiles(t *testing.T) {
+	uploadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("bearer token was forwarded to upload host: %q", got)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer uploadServer.Close()
+
+	var types []string
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v2/templates" {
+			http.NotFound(w, r)
+			return
+		}
+		var body struct{ Type string }
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		types = append(types, body.Type)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]any{
+			"template":   map[string]any{"id": "tpl-1", "displayName": "Example", "type": body.Type, "engine": "lottie", "status": "awaiting_upload", "error": nil},
+			"uploadInfo": map[string]any{"url": uploadServer.URL, "method": "PUT", "key": "key", "expiresIn": 3600},
+		})
+	}))
+	defer apiServer.Close()
+
+	for _, file := range []string{"example.json", "example.lottie", "example.pdf"} {
+		path := filepath.Join(t.TempDir(), file)
+		if err := os.WriteFile(path, []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		state, out, _ := testState(t, apiServer.URL+"/api/v2", strings.NewReader(""))
+		code := Execute(context.Background(), state, []string{"--json", "template", "upload", path, "--no-wait"})
+		if (code == 0) != (file != "example.pdf") {
+			t.Fatalf("%s: exit = %d, output = %s", file, code, out.String())
+		}
+	}
+	if strings.Join(types, ",") != "json,lottie" {
+		t.Fatalf("template types sent = %v", types)
+	}
+}
+
 func TestTemplateDownloadDownloadsByDefaultWithoutForwardingBearer(t *testing.T) {
 	var downloaded bool
 	downloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
